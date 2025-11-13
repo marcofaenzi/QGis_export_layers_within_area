@@ -22,6 +22,7 @@ class ExportWorker(QThread):
         polygon_features: List[QgsFeature],
         layers: List[QgsMapLayer],
         output_directory: str,
+        export_directory_name: str = "",
         parent=None
     ) -> None:
         super().__init__(parent)
@@ -29,6 +30,7 @@ class ExportWorker(QThread):
         self.polygon_features = polygon_features
         self.layers = layers
         self.output_directory = output_directory
+        self.export_directory_name = export_directory_name
         self.is_cancelled = False
 
     def run(self) -> None:
@@ -37,12 +39,14 @@ class ExportWorker(QThread):
             # Inizializza il progresso
             self.progress_updated.emit(0, "Inizializzazione esportazione...")
 
-            # Crea l'exporter con callback di progresso
+            # Crea l'exporter con callback di progresso e controllo cancellazione
             exporter = LayerExporter(
                 self.polygon_layer,
                 self.polygon_features,
                 self.layers,
-                self.output_directory
+                self.output_directory,
+                self.export_directory_name,
+                cancellation_check=lambda: self.is_cancelled
             )
 
             # Patch del metodo export per aggiungere il progresso
@@ -78,6 +82,10 @@ class ExportWorker(QThread):
         original_export_layer = exporter._export_layer
 
         def export_layer_with_progress(layer, features):
+            # Controlla cancellazione prima di ogni layer
+            if self.is_cancelled:
+                raise Exception("Esportazione cancellata dall'utente")
+
             result = original_export_layer(layer, features)
             nonlocal completed_layers
             completed_layers += 1

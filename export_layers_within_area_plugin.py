@@ -5,9 +5,9 @@ from typing import List, Optional, Tuple, Union, Iterable
 
 from qgis.PyQt.QtCore import QCoreApplication, QSettings
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QMessageBox, QProgressBar
+from qgis.PyQt.QtWidgets import QAction, QMessageBox, QProgressBar, QPushButton
 
-from qgis.core import Qgis, QgsFeatureRequest, QgsMessageLog, QgsProject, QgsVectorLayer, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsLayerTree, QgsRasterLayer, QgsMapLayer, QgsMapSettings, QgsReferencedRectangle, QgsBrightnessContrastFilter
+from qgis.core import Qgis, QgsFeatureRequest, QgsMessageLog, QgsProject, QgsVectorLayer, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsLayerTree, QgsRasterLayer, QgsMapLayer, QgsMapSettings, QgsReferencedRectangle, QgsBrightnessContrastFilter, QgsApplication
 
 from .config_dialog import ConfigDialog
 from .exporter import ExportError, LayerExporter
@@ -29,17 +29,22 @@ class ExportLayersWithinAreaPlugin:
         # Attributi per il progresso
         self.progress_bar = None
         self.progress_message_item = None
+        self.cancel_button = None
         self.export_worker = None
 
     def tr(self, message: str) -> str:
         return QCoreApplication.translate("ExportLayersWithinArea", message)
 
     def initGui(self) -> None:
-        export_action = QAction(QIcon(), self.tr("Esporta layer nel poligono"), self.iface.mainWindow())
+        # Icona esportazione personalizzata
+        export_icon_path = os.path.join(self.plugin_dir, "icons", "export_map.svg")
+        export_action = QAction(QIcon(export_icon_path), self.tr("Esporta layer nel poligono"), self.iface.mainWindow())
         export_action.triggered.connect(self.run)
         self.actions.append(export_action)
 
-        config_action = QAction(QIcon(), self.tr("Configura layer poligonale"), self.iface.mainWindow())
+        # Icona configurazione personalizzata  
+        settings_icon_path = os.path.join(self.plugin_dir, "icons", "setting_map.svg")
+        config_action = QAction(QIcon(settings_icon_path), self.tr("Configura layer poligonale"), self.iface.mainWindow())
         config_action.triggered.connect(self.open_configuration)
         self.actions.append(config_action)
 
@@ -134,12 +139,25 @@ class ExportLayersWithinAreaPlugin:
 
         self._save_selected_layers_for_export(dialog.layers_to_export())
 
+        # Controlla se c'è già un'esportazione in corso
+        if self.export_worker is not None and self.export_worker.isRunning():
+            reply = QMessageBox.question(
+                self.iface.mainWindow(),
+                self.tr("Esportazione già in corso"),
+                self.tr("È già in corso un'esportazione. Vuoi avviarne un'altra comunque?\n\nNota: L'esportazione precedente continuerà in background."),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.No:
+                return
+
         # Mostra la barra di progresso
         mode_text = "tutti gli elementi" if export_mode == "all_features" else "elementi nei poligoni selezionati"
         self._show_progress(f"Esportazione {mode_text}...")
 
         # Crea il worker thread
-        self.export_worker = ExportWorker(polygon_layer, features, layers, output_directory)
+        export_directory_name = dialog.export_directory_name()
+        self.export_worker = ExportWorker(polygon_layer, features, layers, output_directory, export_directory_name)
 
         # Connette i segnali del worker
         self.export_worker.progress_updated.connect(self._on_export_progress)
@@ -355,6 +373,12 @@ class ExportLayersWithinAreaPlugin:
             self.progress_bar.setRange(0, 100)
             self.progress_bar.setValue(0)
             self.progress_message_item.layout().addWidget(self.progress_bar)
+
+            # Aggiungi pulsante di cancellazione
+            self.cancel_button = QPushButton(self.tr("Annulla"))
+            self.cancel_button.clicked.connect(self._cancel_export)
+            self.progress_message_item.layout().addWidget(self.cancel_button)
+
             self.iface.messageBar().pushWidget(self.progress_message_item, Qgis.Info)
 
     def _update_progress(self, value: int, message: str) -> None:
@@ -370,6 +394,24 @@ class ExportLayersWithinAreaPlugin:
             self.iface.messageBar().clearWidgets()
             self.progress_message_item = None
             self.progress_bar = None
+            self.cancel_button = None
+
+    def _cancel_export(self) -> None:
+        """Cancella l'esportazione in corso."""
+        if self.export_worker is not None and self.export_worker.isRunning():
+            reply = QMessageBox.question(
+                self.iface.mainWindow(),
+                self.tr("Annulla esportazione"),
+                self.tr("Sei sicuro di voler annullare l'esportazione in corso?"),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.export_worker.cancel()
+                # Disabilita il pulsante di cancellazione
+                if self.cancel_button is not None:
+                    self.cancel_button.setEnabled(False)
+                    self.cancel_button.setText(self.tr("Annullamento..."))
 
     def _on_export_progress(self, value: int, message: str) -> None:
         """Gestisce gli aggiornamenti del progresso dal worker thread."""

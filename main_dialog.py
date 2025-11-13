@@ -32,7 +32,7 @@ class MainDialog(QDialog):
         self._selected_feature_ids = [feature.id() for feature in polygon_layer.selectedFeatures()]
         self._layers_to_export: List[str] = []
         self._previously_selected_layer_ids = previously_selected_layer_ids or []
-        self._export_mode = "within_area"  # "within_area" o "all_features"
+        self._export_mode = "all_features"  # "within_area" o "all_features"
 
         self.setWindowTitle("Export Layers Within Area")
         self.resize(540, 480)
@@ -64,15 +64,15 @@ class MainDialog(QDialog):
         export_mode_box = QGroupBox("Modalità di esportazione", self)
         export_mode_layout = QVBoxLayout(export_mode_box)
 
-        self._export_within_area_radio = QRadioButton("Esporta solo elementi nei poligoni selezionati", self)
-        self._export_within_area_radio.setChecked(True)
-        self._export_within_area_radio.toggled.connect(self._on_export_mode_changed)
-
         self._export_all_radio = QRadioButton("Esporta tutti gli elementi", self)
+        self._export_all_radio.setChecked(True)
         self._export_all_radio.toggled.connect(self._on_export_mode_changed)
 
-        export_mode_layout.addWidget(self._export_within_area_radio)
+        self._export_within_area_radio = QRadioButton("Esporta solo elementi nei poligoni selezionati", self)
+        self._export_within_area_radio.toggled.connect(self._on_export_mode_changed)
+
         export_mode_layout.addWidget(self._export_all_radio)
+        export_mode_layout.addWidget(self._export_within_area_radio)
 
         # Sezione informazioni poligono (visibile solo se si sceglie "within_area")
         self._polygon_info_box = QGroupBox("Poligono di ritaglio", self)
@@ -93,6 +93,9 @@ class MainDialog(QDialog):
         layout.addWidget(selection_box)
         layout.addLayout(directory_name_layout)
         layout.addWidget(buttons)
+
+        # Inizializza lo stato della sezione poligoni (disabilitata per default)
+        self._polygon_info_box.setEnabled(False)
 
     def _set_default_directory_name(self) -> None:
         """Imposta il nome predefinito della directory nel formato YYYY-MM-DD_nome_progetto."""
@@ -163,19 +166,18 @@ class MainDialog(QDialog):
                 "Seleziona almeno un poligono nel layer configurato prima di avviare l'esportazione."
             )
         elif len(self._selected_feature_ids) == 1:
-            self._feature_label.setText(f"ID poligono selezionato: {self._selected_feature_ids[0]}")
+            self._feature_label.setText("1 poligono selezionato")
         else:
-            ids = ", ".join(str(fid) for fid in self._selected_feature_ids)
-            self._feature_label.setText(f"ID poligoni selezionati: {ids}")
+            self._feature_label.setText(f"{len(self._selected_feature_ids)} poligoni selezionati")
 
     def _on_export_mode_changed(self) -> None:
         """Gestisce il cambio di modalità di esportazione."""
         if self._export_within_area_radio.isChecked():
             self._export_mode = "within_area"
-            self._polygon_info_box.show()
+            self._polygon_info_box.setEnabled(True)
         else:
             self._export_mode = "all_features"
-            self._polygon_info_box.hide()
+            self._polygon_info_box.setEnabled(False)
 
     def _on_accept(self) -> None:
         self._layers_to_export = []

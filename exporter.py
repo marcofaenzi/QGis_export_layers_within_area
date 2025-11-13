@@ -1,11 +1,13 @@
 """Logica di esportazione dei layer."""
 
 import os
-from typing import Iterable, List, Union, Tuple
+import time
+from typing import Iterable, List, Union, Tuple, Callable
 
 from qgis.core import (
     QgsCoordinateTransform,
     QgsFeature,
+    QgsFeatureRequest,
     QgsGeometry,
     QgsMapLayer,
     QgsProject,
@@ -22,6 +24,49 @@ class ExportError(RuntimeError):
     """Errore generico durante l'esportazione."""
 
 
+def _execute_with_retry(operation: Callable, max_retries: int = 3, delay: float = 1.0) -> any:
+    """Esegue un'operazione con retry automatico per gestire timeout di connessione.
+
+    Args:
+        operation: Funzione da eseguire
+        max_retries: Numero massimo di tentativi
+        delay: Ritardo tra tentativi in secondi
+
+    Returns:
+        Risultato dell'operazione
+
+    Raises:
+        ExportError: Se tutti i tentativi falliscono
+    """
+    last_error = None
+
+    for attempt in range(max_retries):
+        try:
+            return operation()
+        except Exception as e:
+            last_error = e
+            error_str = str(e).lower()
+
+            # Controlla se è un errore di connessione che merita un retry
+            if any(keyword in error_str for keyword in ['password', 'connection', 'timeout', 'fe_sendauth']):
+                if attempt < max_retries - 1:
+                    QgsMessageLog.logMessage(
+                        f"Tentativo {attempt + 1} fallito, riprovo tra {delay} secondi: {str(e)}",
+                        "ExportLayersWithinArea",
+                        level=Qgis.Warning,
+                    )
+                    time.sleep(delay)
+                    continue
+                else:
+                    raise ExportError(f"Connessione al database fallita dopo {max_retries} tentativi: {str(e)}")
+            else:
+                # Errore non legato alla connessione, non riprovare
+                raise ExportError(str(e))
+
+    # Questo non dovrebbe mai essere raggiunto, ma per sicurezza
+    raise ExportError(f"Errore imprevisto: {str(last_error)}")
+
+
 class LayerExporter:
     """Gestisce l'esportazione dei layer selezionati all'interno di uno o più poligoni."""
 
@@ -31,17 +76,21 @@ class LayerExporter:
         polygon_features: Union[QgsFeature, List[QgsFeature]],
         target_layers: Iterable[QgsMapLayer], # Changed from QgsVectorLayer to QgsMapLayer
         output_directory: str,
+        export_directory_name: str = "",
+        cancellation_check=None,
     ) -> None:
         self._polygon_layer = polygon_layer
-        
+
         # Normalizza: accetta sia una singola feature che una lista
         if isinstance(polygon_features, QgsFeature):
             self._polygon_features = [polygon_features]
         else:
             self._polygon_features = list(polygon_features)
-        
+
         self._target_layers = list(target_layers)
         self._output_directory = output_directory
+        self._export_directory_name = export_directory_name
+        self._cancellation_check = cancellation_check  # Funzione per controllare se l'operazione è stata cancellata
 
         if not os.path.isdir(self._output_directory):
             raise ExportError("La cartella di destinazione non esiste.")
@@ -52,11 +101,18 @@ class LayerExporter:
             for feature in self._polygon_features:
                 if not feature or not feature.geometry() or feature.geometry().isEmpty():
                     raise ExportError("Uno o più poligoni selezionati non contengono geometrie valide.")
-        
+
         # Crea una sottodirectory per l'esportazione
         from datetime import datetime
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self._export_subdirectory = os.path.join(self._output_directory, f"export_{timestamp}")
+        if self._export_directory_name and self._export_directory_name.strip():
+            # Usa il nome personalizzato fornito dall'utente
+            export_dir_name = self._export_directory_name.strip()
+        else:
+            # Fallback al timestamp se non è specificato un nome
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            export_dir_name = f"export_{timestamp}"
+
+        self._export_subdirectory = os.path.join(self._output_directory, export_dir_name)
         os.makedirs(self._export_subdirectory, exist_ok=True)
 
     def export(self) -> List[Tuple[str, QgsMapLayer]]:
@@ -147,31 +203,97 @@ class LayerExporter:
 
     def _features_within(self, layer: QgsVectorLayer, polygon_geom: QgsGeometry) -> List[QgsFeature]:
         result: List[QgsFeature] = []
-        request = layer.getFeatures()
-        for feature in request:
-            geometry = feature.geometry()
-            if not geometry or geometry.isEmpty():
-                continue
-            if not geometry.intersects(polygon_geom):
-                continue
 
-            new_feature = QgsFeature(feature)
-            new_geometry = self._clip_geometry(layer, geometry, polygon_geom)
-            if new_geometry is None or new_geometry.isEmpty():
-                continue
-            new_feature.setGeometry(new_geometry)
-            result.append(new_feature)
+        # Usa una richiesta spaziale per limitare le features caricate
+        # Questo riduce significativamente il carico sul database
+        request = QgsFeatureRequest()
+        request.setFilterRect(polygon_geom.boundingBox())
+
+        # Aggiungi un piccolo buffer alla bounding box per essere sicuri di non perdere features
+        buffered_bbox = polygon_geom.boundingBox()
+        buffer_distance = min(buffered_bbox.width(), buffered_bbox.height()) * 0.01  # 1% di buffer
+        buffered_bbox.grow(buffer_distance)
+
+        request.setFilterRect(buffered_bbox)
+
+        # Ottimizzazioni per le performance
+        request.setFlags(QgsFeatureRequest.NoGeometry | QgsFeatureRequest.SubsetOfAttributes)
+        # Rimuovi il flag NoGeometry perché abbiamo bisogno della geometria per il ritaglio
+        request.setFlags(request.flags() & ~QgsFeatureRequest.NoGeometry)
+
+        def get_features_operation():
+            features_iterator = layer.getFeatures(request)
+            for feature in features_iterator:
+                # Controlla se l'operazione è stata cancellata
+                if self._cancellation_check and self._cancellation_check():
+                    raise ExportError("Esportazione cancellata dall'utente")
+
+                geometry = feature.geometry()
+                if not geometry or geometry.isEmpty():
+                    continue
+                if not geometry.intersects(polygon_geom):
+                    continue
+
+                new_feature = QgsFeature(feature)
+                new_geometry = self._clip_geometry(layer, geometry, polygon_geom)
+                if new_geometry is None or new_geometry.isEmpty():
+                    continue
+                new_feature.setGeometry(new_geometry)
+                result.append(new_feature)
+
+        try:
+            _execute_with_retry(get_features_operation)
+        except ExportError:
+            raise  # Re-raise ExportError as-is
+        except Exception as e:
+            # Gestione errori di connessione database
+            error_msg = f"Errore nell'accesso al layer {layer.name()}: {str(e)}"
+            if "password" in str(e).lower() or "connection" in str(e).lower():
+                error_msg += "\n\nPossibile timeout della connessione al database. Riprova con meno layer o una selezione più piccola."
+            raise ExportError(error_msg)
+
         return result
 
     def _all_features(self, layer: QgsVectorLayer) -> List[QgsFeature]:
         """Restituisce tutte le features di un layer senza applicare ritagli geometrici."""
         result: List[QgsFeature] = []
-        request = layer.getFeatures()
-        for feature in request:
-            geometry = feature.geometry()
-            if not geometry or geometry.isEmpty():
-                continue
-            result.append(QgsFeature(feature))
+
+        # Usa una richiesta con limiti per evitare di caricare tutto in memoria
+        # Questo è particolarmente importante per layer connessi a database
+        request = QgsFeatureRequest()
+
+        # Limita il numero di features per evitare timeout (massimo 10000 features)
+        # L'utente può sempre fare esportazioni separate se necessario
+        request.setLimit(10000)
+
+        # Ottimizzazioni per le performance
+        request.setFlags(request.flags() & ~QgsFeatureRequest.NoGeometry)
+
+        def get_all_features_operation():
+            features_iterator = layer.getFeatures(request)
+            for feature in features_iterator:
+                # Controlla se l'operazione è stata cancellata
+                if self._cancellation_check and self._cancellation_check():
+                    raise ExportError("Esportazione cancellata dall'utente")
+
+                geometry = feature.geometry()
+                if not geometry or geometry.isEmpty():
+                    continue
+                result.append(QgsFeature(feature))
+
+        try:
+            _execute_with_retry(get_all_features_operation)
+        except ExportError:
+            raise  # Re-raise ExportError as-is
+        except Exception as e:
+            # Gestione errori di connessione database
+            error_msg = f"Errore nell'accesso al layer {layer.name()}: {str(e)}"
+            if "password" in str(e).lower() or "connection" in str(e).lower():
+                error_msg += "\n\nPossibile timeout della connessione al database. Riprova con meno layer o considera di filtrare i dati."
+            elif "limit" in str(e).lower():
+                error_msg += "\n\nIl layer contiene troppi elementi. Usa la modalità 'Elementi nei poligoni selezionati' per limitare l'esportazione."
+            raise ExportError(error_msg)
+
         return result
 
     def _clip_geometry(
