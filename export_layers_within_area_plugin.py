@@ -301,12 +301,15 @@ class ExportLayersWithinAreaPlugin:
         self._rebuild_layer_tree(original_root, new_root, exported_layers_map)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
         # Applica le configurazioni delle etichette ora che tutti i layer sono stati aggiunti
         self._apply_pending_labeling(pending_labeling)
 
         # Copia le relazioni dal progetto originale al nuovo progetto
         self._copy_project_relations(project, new_project, exported_layers_map)
 
+=======
+>>>>>>> parent of c3aef7c (versione 1.4)
 =======
 >>>>>>> parent of c3aef7c (versione 1.4)
         if not new_project.write():
@@ -540,6 +543,7 @@ class ExportLayersWithinAreaPlugin:
             self.tr("Esportazione cancellata"),
         )
 
+<<<<<<< HEAD
 <<<<<<< HEAD
     def _validate_labeling_in_new_layer(self, labeling, new_layer, original_layer):
         """Valida se le etichette copiate sono utilizzabili nel nuovo layer."""
@@ -790,5 +794,7 @@ class ExportLayersWithinAreaPlugin:
 
         return issues
 
+=======
+>>>>>>> parent of c3aef7c (versione 1.4)
 =======
 >>>>>>> parent of c3aef7c (versione 1.4)
