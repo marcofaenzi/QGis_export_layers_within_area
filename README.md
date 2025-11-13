@@ -94,7 +94,10 @@ cartella_esportazione/
 ### Gestione delle relazioni
 - **Relazioni tra tabelle**: vengono copiate automaticamente nel progetto esportato
 - **Solo relazioni complete**: vengono incluse solo le relazioni dove entrambi i layer correlati sono stati esportati
-- **Log delle operazioni**: vengono registrati nel log di QGIS i dettagli su quali relazioni sono state copiate o saltate
+- **Validazione completa**: ogni relazione viene validata prima dell'aggiunta al progetto esportato
+- **Controllo dei campi**: verifica automatica che tutti i campi della relazione esistano nei layer esportati
+- **Log delle operazioni**: vengono registrati nel log di QGIS i dettagli su quali relazioni sono state copiate o saltate, con informazioni dettagliate su eventuali problemi
+- **Test delle relazioni**: disponibile uno script (`test_relations.py`) per verificare che le relazioni siano state copiate correttamente
 
 ### Barra di progresso
 - Monitoraggio in tempo reale dell'avanzamento dell'esportazione
@@ -151,6 +154,38 @@ Se QGIS va in freeze durante esportazioni complesse con molti dati:
    - Vai su Impostazioni → Opzioni → Autenticazione
    - Assicurati che l'autenticazione sia configurata correttamente
    - Verifica che i layer utilizzino l'autenticazione master
+
+### Problemi con le relazioni nel progetto esportato
+Se le relazioni tra tabelle non vengono visualizzate correttamente nel progetto esportato:
+
+1. **Verifica che entrambi i layer siano stati esportati**:
+   - Le relazioni vengono copiate solo se entrambi i layer (referencing e referenced) sono presenti nell'esportazione
+   - Controlla il log di QGIS (Vista → Pannelli → Log messaggi) per vedere quali relazioni sono state saltate
+
+2. **Controlla il log di QGIS**:
+   - Apri il pannello "Log messaggi" in QGIS
+   - Cerca messaggi con tag "ExportLayersWithinArea"
+   - Verifica se ci sono messaggi di warning o errori relativi alle relazioni
+   - I messaggi ti diranno se una relazione non è stata copiata e perché (campi mancanti, layer non validi, ecc.)
+
+3. **Usa lo script di test**:
+   - Apri il progetto esportato in QGIS
+   - Vai su Plugins → Console Python
+   - Carica ed esegui lo script `test_relations.py` dalla directory del plugin:
+     ```python
+     exec(open('/path/to/plugin/test_relations.py').read())
+     ```
+   - Lo script mostrerà tutte le relazioni presenti e se sono valide
+
+4. **Verifica manualmente le relazioni**:
+   - Nel progetto esportato, vai su Progetto → Proprietà → Relazioni
+   - Controlla se le relazioni sono presenti nell'elenco
+   - Se una relazione appare ma non funziona, verifica che i campi della relazione esistano in entrambi i layer
+
+5. **Problemi comuni**:
+   - **Campi mancanti**: Se i campi della relazione non esistono nei layer esportati (GeoPackage), la relazione viene saltata
+   - **Layer non esportati**: Se uno dei layer della relazione non è stato selezionato per l'esportazione, la relazione viene saltata
+   - **Relazioni non valide nel progetto originale**: Le relazioni devono essere valide nel progetto originale per essere copiate
 
 ### Esportazioni di grandi dimensioni
 Per esportazioni molto grandi, considera:
