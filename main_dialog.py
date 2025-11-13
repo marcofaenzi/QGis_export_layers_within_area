@@ -1,0 +1,161 @@
+"""Dialog principale del plugin."""
+
+import os
+from typing import List, Optional
+
+from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QGroupBox,
+    QLabel,
+    # QListWidget,
+    # QListWidgetItem,
+    QMessageBox,
+    QVBoxLayout,
+    QWidget,
+    QTreeWidget,
+    QTreeWidgetItem,
+)
+
+from qgis.core import QgsMapLayer, QgsProject, QgsVectorLayer, QgsWkbTypes, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsLayerTree
+from qgis.core import QgsMessageLog, Qgis
+
+
+class MainDialog(QDialog):
+    """Dialog che permette di selezionare i layer da esportare e il poligono."""
+
+    def __init__(self, parent: QWidget, polygon_layer: QgsVectorLayer, previously_selected_layer_ids: Optional[List[str]] = None) -> None:
+        super().__init__(parent)
+        self._polygon_layer = polygon_layer
+        self._selected_feature_ids = [feature.id() for feature in polygon_layer.selectedFeatures()]
+        self._layers_to_export: List[str] = []
+        self._previously_selected_layer_ids = previously_selected_layer_ids or [] # Ripristino l'attributo per la persistenza
+
+        self.setWindowTitle("Export Layers Within Area")
+        self.resize(540, 420)
+
+        self._feature_label = QLabel(self)
+        self._feature_label.setWordWrap(True)
+        self._refresh_feature_label()
+
+        self._layer_tree = QTreeWidget(self) # Sostituito QListWidget con QTreeWidget
+        self._layer_tree.setHeaderLabel("Layer")
+        self._layer_tree.setColumnCount(1)
+        self._populate_layer_list(self._previously_selected_layer_ids) # Passa la lista al metodo di popolamento
+
+        selection_box = QGroupBox("Layer vettoriali da esportare", self)
+        selection_layout = QVBoxLayout(selection_box)
+        selection_layout.addWidget(self._layer_tree) # Aggiornato per QTreeWidget
+
+        info_box = QGroupBox("Poligono di ritaglio", self)
+        info_layout = QVBoxLayout(info_box)
+        info_layout.addWidget(QLabel(f"Layer configurato: {polygon_layer.name()}"))
+        info_layout.addWidget(self._feature_label)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            self,
+        )
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(info_box)
+        layout.addWidget(selection_box)
+        layout.addWidget(buttons)
+
+    def _populate_layer_list(self, previously_selected_layer_ids: List[str]) -> None:
+        self._layer_tree.clear()
+        root_node = QgsProject.instance().layerTreeRoot()
+        self._add_children_to_tree(root_node, self._layer_tree.invisibleRootItem(), previously_selected_layer_ids)
+        self._layer_tree.expandAll()
+
+    def _add_children_to_tree(self, node: QgsLayerTreeGroup, parent_item: QTreeWidgetItem, previously_selected_layer_ids: List[str]) -> None:
+        for child in node.children():
+            if child.nodeType() == QgsLayerTree.NodeLayer:
+                layer = child.layer()
+                # Modificato per includere layer Raster (come XYZ Tiles)
+                if layer is None or (layer.type() != QgsMapLayer.VectorLayer and layer.type() != QgsMapLayer.RasterLayer):
+                    continue
+                # Filtra i layer vettoriali senza geometria
+                if layer.type() == QgsMapLayer.VectorLayer and layer.geometryType() == QgsWkbTypes.NoGeometry:
+                    QgsMessageLog.logMessage(f"[DEBUG] _add_children_to_tree: Escluso layer vettoriale senza geometria: {layer.name()}", "ExportLayersWithinArea", Qgis.Info)
+                    continue
+                if layer == self._polygon_layer: # Escludi il layer poligonale di riferimento
+                    QgsMessageLog.logMessage(f"[DEBUG] _add_children_to_tree: Escluso layer poligono di riferimento: {layer.name()}", "ExportLayersWithinArea", Qgis.Info)
+                    continue
+
+                # Nuovo log per ogni layer considerato
+                QgsMessageLog.logMessage(f"[DEBUG] _add_children_to_tree: Elaborazione layer: {layer.name()} (ID: {layer.id()}, Tipo: {layer.type()})", "ExportLayersWithinArea", Qgis.Info)
+
+                item = QTreeWidgetItem(parent_item)
+                item.setText(0, layer.name())
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setData(0, Qt.ItemDataRole.UserRole, layer.id())
+
+                if layer.id() in previously_selected_layer_ids:
+                    item.setCheckState(0, Qt.CheckState.Checked)
+                    QgsMessageLog.logMessage(f"[DEBUG] _add_children_to_tree: Layer pre-selezionato: {layer.name()}", "ExportLayersWithinArea", Qgis.Info)
+                else:
+                    item.setCheckState(0, Qt.CheckState.Unchecked)
+
+            elif child.nodeType() == QgsLayerTree.NodeGroup:
+                group_item = QTreeWidgetItem(parent_item)
+                group_item.setText(0, child.name())
+                # I gruppi non sono direttamente selezionabili, ma i loro figli sì
+                # group_item.setFlags(group_item.flags() | Qt.ItemFlag.ItemIsTristate)
+                self._add_children_to_tree(child, group_item, previously_selected_layer_ids)
+
+    def _refresh_feature_label(self) -> None:
+        if not self._selected_feature_ids:
+            self._feature_label.setText(
+                "Seleziona almeno un poligono nel layer configurato prima di avviare l'esportazione."
+            )
+        elif len(self._selected_feature_ids) == 1:
+            self._feature_label.setText(f"ID poligono selezionato: {self._selected_feature_ids[0]}")
+        else:
+            ids = ", ".join(str(fid) for fid in self._selected_feature_ids)
+            self._feature_label.setText(f"ID poligoni selezionati: {ids}")
+
+    def _on_accept(self) -> None:
+        self._layers_to_export = []
+        self._get_checked_layers_from_tree(self._layer_tree.invisibleRootItem())
+
+        if not self._selected_feature_ids:
+            QMessageBox.warning(self, "Export Layers Within Area", "Nessun poligono selezionato.")
+            return
+
+        if not self._layers_to_export:
+            QMessageBox.warning(self, "Export Layers Within Area", "Seleziona almeno un layer da esportare.")
+            return
+
+        self.accept()
+
+    def _get_checked_layers_from_tree(self, item: QTreeWidgetItem) -> None:
+        for i in range(item.childCount()):
+            child = item.child(i)
+            if child.checkState(0) == Qt.CheckState.Checked:
+                layer_id = child.data(0, Qt.ItemDataRole.UserRole)
+                if layer_id: # Assicurati che sia un ID valido di layer e non un gruppo
+                    self._layers_to_export.append(layer_id)
+            self._get_checked_layers_from_tree(child) # Ricorsione per i figli
+
+    def selected_feature_ids(self) -> List[int]:
+        return list(self._selected_feature_ids)
+
+    def selected_layers(self) -> List[QgsMapLayer]: # Corretta la firma del metodo per essere più generica
+        project = QgsProject.instance()
+        layers: List[QgsMapLayer] = [] # Corretto il tipo della lista per essere più generica
+        for layer_id in self._layers_to_export:
+            layer = project.mapLayer(layer_id)
+            if layer is not None: # Aggiungi controllo per None
+                layers.append(layer)
+        return layers
+
+    def layers_to_export(self) -> List[str]:
+        return list(self._layers_to_export)
+
+    def selected_polygon_layer(self) -> QgsVectorLayer:
+        return self._polygon_layer
+
