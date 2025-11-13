@@ -1,16 +1,17 @@
 """Plugin QGIS per esportare layer all'interno di un poligono selezionato."""
 
 import os
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union, Iterable
 
 from qgis.PyQt.QtCore import QCoreApplication, QSettings
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QMessageBox
+from qgis.PyQt.QtWidgets import QAction, QMessageBox, QProgressBar
 
 from qgis.core import Qgis, QgsFeatureRequest, QgsMessageLog, QgsProject, QgsVectorLayer, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsLayerTree, QgsRasterLayer, QgsMapLayer, QgsMapSettings, QgsReferencedRectangle, QgsBrightnessContrastFilter
 
 from .config_dialog import ConfigDialog
 from .exporter import ExportError, LayerExporter
+from .export_worker import ExportWorker
 from .main_dialog import MainDialog
 
 
@@ -24,6 +25,11 @@ class ExportLayersWithinAreaPlugin:
         self.menu = self.tr("&Export Layers Within Area")
         self.toolbar = self.iface.addToolBar("Export Layers Within Area")
         self.toolbar.setObjectName("ExportLayersWithinAreaToolbar")
+
+        # Attributi per il progresso
+        self.progress_bar = None
+        self.progress_message_item = None
+        self.export_worker = None
 
     def tr(self, message: str) -> str:
         return QCoreApplication.translate("ExportLayersWithinArea", message)
@@ -125,6 +131,7 @@ class ExportLayersWithinAreaPlugin:
         exporter = LayerExporter(polygon_layer, features, layers, output_directory)
         try:
             exported_data = exporter.export()
+            export_subdirectory = exporter.get_export_directory()
         except ExportError as exc:
             QgsMessageLog.logMessage(str(exc), "ExportLayersWithinArea", level=Qgis.Critical)
             QMessageBox.critical(
@@ -139,7 +146,7 @@ class ExportLayersWithinAreaPlugin:
             self.tr("Esportazione completata: {count} file creati").format(count=len(exported_data)),
         )
 
-        self._create_qgis_project(exported_data, output_directory)
+        self._create_qgis_project(exported_data, export_subdirectory)
 
     def _create_qgis_project(self, exported_data: List[Tuple[str, QgsMapLayer]], output_directory: str) -> None:
         project = QgsProject.instance()
@@ -246,7 +253,15 @@ class ExportLayersWithinAreaPlugin:
                     new_layer = exported_layers_map[original_layer.id()]
                     tree_layer_node = new_parent_group.addLayer(new_layer) # Cattura il nodo dell'albero del layer
                     # Imposta la visibilità del nodo dell'albero del layer uguale a quella del layer originale
-                    tree_layer_node.setItemVisibilityChecked(child.isVisible()) # Corretto il metodo per ottenere lo stato di visibilità
+                    tree_layer_node.setItemVisibilityChecked(child.isVisible())
+                    
+                    # Copia le impostazioni di scale visibility
+                    if isinstance(child, QgsLayerTreeLayer):
+                        tree_layer_node.setScaleBasedVisibility(child.scaleBasedVisibility())
+                        if child.scaleBasedVisibility():
+                            tree_layer_node.setMinimumScale(child.minimumScale())
+                            tree_layer_node.setMaximumScale(child.maximumScale())
+                    
                     group_contains_exported_layers = True
             elif child.nodeType() == QgsLayerTree.NodeGroup:
                 # Crea un nuovo gruppo nel progetto esportato

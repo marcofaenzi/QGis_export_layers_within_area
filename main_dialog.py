@@ -1,6 +1,7 @@
 """Dialog principale del plugin."""
 
 import os
+from datetime import datetime
 from typing import List, Optional
 
 from qgis.PyQt.QtCore import Qt
@@ -9,8 +10,7 @@ from qgis.PyQt.QtWidgets import (
     QDialogButtonBox,
     QGroupBox,
     QLabel,
-    # QListWidget,
-    # QListWidgetItem,
+    QLineEdit,
     QMessageBox,
     QVBoxLayout,
     QWidget,
@@ -30,23 +30,33 @@ class MainDialog(QDialog):
         self._polygon_layer = polygon_layer
         self._selected_feature_ids = [feature.id() for feature in polygon_layer.selectedFeatures()]
         self._layers_to_export: List[str] = []
-        self._previously_selected_layer_ids = previously_selected_layer_ids or [] # Ripristino l'attributo per la persistenza
+        self._previously_selected_layer_ids = previously_selected_layer_ids or []
 
         self.setWindowTitle("Export Layers Within Area")
-        self.resize(540, 420)
+        self.resize(540, 480)
 
         self._feature_label = QLabel(self)
         self._feature_label.setWordWrap(True)
         self._refresh_feature_label()
 
-        self._layer_tree = QTreeWidget(self) # Sostituito QListWidget con QTreeWidget
+        self._layer_tree = QTreeWidget(self)
         self._layer_tree.setHeaderLabel("Layer")
         self._layer_tree.setColumnCount(1)
-        self._populate_layer_list(self._previously_selected_layer_ids) # Passa la lista al metodo di popolamento
+        self._populate_layer_list(self._previously_selected_layer_ids)
+
+        # Campo per il nome della directory
+        self._directory_name_edit = QLineEdit(self)
+        self._directory_name_edit.setPlaceholderText("Nome directory di esportazione")
+        self._set_default_directory_name()
+        
+        directory_name_label = QLabel("Nome directory di esportazione:", self)
+        directory_name_layout = QVBoxLayout()
+        directory_name_layout.addWidget(directory_name_label)
+        directory_name_layout.addWidget(self._directory_name_edit)
 
         selection_box = QGroupBox("Layer vettoriali da esportare", self)
         selection_layout = QVBoxLayout(selection_box)
-        selection_layout.addWidget(self._layer_tree) # Aggiornato per QTreeWidget
+        selection_layout.addWidget(self._layer_tree)
 
         info_box = QGroupBox("Poligono di ritaglio", self)
         info_layout = QVBoxLayout(info_box)
@@ -63,7 +73,29 @@ class MainDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(info_box)
         layout.addWidget(selection_box)
+        layout.addLayout(directory_name_layout)
         layout.addWidget(buttons)
+
+    def _set_default_directory_name(self) -> None:
+        """Imposta il nome predefinito della directory nel formato YYYY-MM-DD_nome_progetto."""
+        project = QgsProject.instance()
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        
+        # Prova a ottenere il titolo del progetto, altrimenti usa il nome del file
+        project_name = project.title()
+        if not project_name or project_name.strip() == "":
+            # Se non c'è un titolo, usa il nome del file senza estensione
+            project_file = project.fileName()
+            if project_file:
+                project_name = os.path.splitext(os.path.basename(project_file))[0]
+            else:
+                project_name = "progetto"
+        
+        # Sanitizza il nome del progetto per usarlo come nome directory
+        safe_project_name = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in project_name).strip("_") or "progetto"
+        
+        default_name = f"{date_str}_{safe_project_name}"
+        self._directory_name_edit.setText(default_name)
 
     def _populate_layer_list(self, previously_selected_layer_ids: List[str]) -> None:
         self._layer_tree.clear()
@@ -158,4 +190,13 @@ class MainDialog(QDialog):
 
     def selected_polygon_layer(self) -> QgsVectorLayer:
         return self._polygon_layer
+
+    def export_directory_name(self) -> str:
+        """Restituisce il nome della directory di esportazione."""
+        name = self._directory_name_edit.text().strip()
+        if not name:
+            # Se è vuoto, usa il nome predefinito
+            self._set_default_directory_name()
+            name = self._directory_name_edit.text().strip()
+        return name
 

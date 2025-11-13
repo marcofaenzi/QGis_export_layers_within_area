@@ -53,6 +53,12 @@ class LayerExporter:
         for feature in self._polygon_features:
             if not feature or not feature.geometry() or feature.geometry().isEmpty():
                 raise ExportError("Uno o più poligoni selezionati non contengono geometrie valide.")
+        
+        # Crea una sottodirectory per l'esportazione
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self._export_subdirectory = os.path.join(self._output_directory, f"export_{timestamp}")
+        os.makedirs(self._export_subdirectory, exist_ok=True)
 
     def export(self) -> List[Tuple[str, QgsMapLayer]]:
         exported_data: List[Tuple[str, QgsMapLayer]] = []
@@ -96,6 +102,10 @@ class LayerExporter:
             raise ExportError("Nessuna feature è stata esportata. Verifica le selezioni.")
 
         return exported_data
+
+    def get_export_directory(self) -> str:
+        """Restituisce la sottodirectory dove sono stati salvati i file esportati."""
+        return self._export_subdirectory
 
     def _union_polygon_geometries(self) -> QgsGeometry:
         """Unisce tutte le geometrie dei poligoni selezionati in un'unica geometria."""
@@ -164,7 +174,7 @@ class LayerExporter:
         # Crea un nome file basato sul nome del layer originale
         filename = f"{safe_name}.gpkg"
         
-        output_path = os.path.join(self._output_directory, filename)
+        output_path = os.path.join(self._export_subdirectory, filename)
 
         options = QgsVectorFileWriter.SaveVectorOptions()
         options.driverName = "GPKG"
