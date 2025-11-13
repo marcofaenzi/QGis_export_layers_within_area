@@ -46,13 +46,12 @@ class LayerExporter:
         if not os.path.isdir(self._output_directory):
             raise ExportError("La cartella di destinazione non esiste.")
 
-        if not self._polygon_features:
-            raise ExportError("Nessun poligono selezionato.")
-
-        # Verifica che tutte le feature abbiano geometrie valide
-        for feature in self._polygon_features:
-            if not feature or not feature.geometry() or feature.geometry().isEmpty():
-                raise ExportError("Uno o più poligoni selezionati non contengono geometrie valide.")
+        # Se non ci sono poligoni selezionati, esportiamo tutti gli elementi (modalità "all_features")
+        if self._polygon_features:
+            # Verifica che tutte le feature abbiano geometrie valide
+            for feature in self._polygon_features:
+                if not feature or not feature.geometry() or feature.geometry().isEmpty():
+                    raise ExportError("Uno o più poligoni selezionati non contengono geometrie valide.")
         
         # Crea una sottodirectory per l'esportazione
         from datetime import datetime
@@ -64,23 +63,34 @@ class LayerExporter:
         exported_data: List[Tuple[str, QgsMapLayer]] = []
         transform_context = QgsProject.instance().transformContext()
 
-        # Unisce tutte le geometrie dei poligoni selezionati in un'unica geometria
-        union_geom = self._union_polygon_geometries()
+        # Determina se dobbiamo applicare ritagli geometrici
+        use_clipping = len(self._polygon_features) > 0
+        union_geom = None
+
+        if use_clipping:
+            # Unisce tutte le geometrie dei poligoni selezionati in un'unica geometria
+            union_geom = self._union_polygon_geometries()
 
         for layer in self._target_layers:
             if layer.type() == QgsMapLayer.VectorLayer:
-                # Logica di esportazione per layer vettoriali (con ritaglio)
-                geom_for_layer = QgsGeometry(union_geom)
-                
-                if not geom_for_layer.isEmpty() and self._polygon_layer.crs() != layer.crs():
-                    transform = QgsCoordinateTransform(
-                        self._polygon_layer.crs(), layer.crs(), transform_context
-                    )
-                    geom_for_layer.transform(transform)
+                if use_clipping:
+                    # Logica di esportazione per layer vettoriali (con ritaglio)
+                    geom_for_layer = QgsGeometry(union_geom)
 
-                features = self._features_within(layer, geom_for_layer)
-                if not features:
-                    continue
+                    if not geom_for_layer.isEmpty() and self._polygon_layer.crs() != layer.crs():
+                        transform = QgsCoordinateTransform(
+                            self._polygon_layer.crs(), layer.crs(), transform_context
+                        )
+                        geom_for_layer.transform(transform)
+
+                    features = self._features_within(layer, geom_for_layer)
+                    if not features:
+                        continue
+                else:
+                    # Esporta tutti gli elementi senza ritaglio
+                    features = self._all_features(layer)
+                    if not features:
+                        continue
 
                 path = self._export_layer(layer, features)
                 exported_data.append((path, layer))
@@ -151,6 +161,17 @@ class LayerExporter:
                 continue
             new_feature.setGeometry(new_geometry)
             result.append(new_feature)
+        return result
+
+    def _all_features(self, layer: QgsVectorLayer) -> List[QgsFeature]:
+        """Restituisce tutte le features di un layer senza applicare ritagli geometrici."""
+        result: List[QgsFeature] = []
+        request = layer.getFeatures()
+        for feature in request:
+            geometry = feature.geometry()
+            if not geometry or geometry.isEmpty():
+                continue
+            result.append(QgsFeature(feature))
         return result
 
     def _clip_geometry(

@@ -93,29 +93,35 @@ class ExportLayersWithinAreaPlugin:
         if dialog.exec_() != dialog.Accepted:
             return
 
-        selected_ids = dialog.selected_feature_ids()
-        if not selected_ids:
-            QMessageBox.warning(
-                self.iface.mainWindow(),
-                self.tr("Export Layers Within Area"),
-                self.tr("Seleziona almeno un poligono nel layer configurato prima di procedere."),
-            )
-            return
+        # Ottieni la modalità di esportazione
+        export_mode = dialog.export_mode()
 
-        # Recupera tutti i poligoni selezionati
         features = []
-        for feature_id in selected_ids:
-            feature = self._fetch_feature_by_id(polygon_layer, feature_id)
-            if feature is not None and feature.geometry() and not feature.geometry().isEmpty():
-                features.append(feature)
+        if export_mode == "within_area":
+            # Modalità tradizionale: esporta solo gli elementi nei poligoni selezionati
+            selected_ids = dialog.selected_feature_ids()
+            if not selected_ids:
+                QMessageBox.warning(
+                    self.iface.mainWindow(),
+                    self.tr("Export Layers Within Area"),
+                    self.tr("Seleziona almeno un poligono nel layer configurato prima di procedere."),
+                )
+                return
 
-        if not features:
-            QMessageBox.warning(
-                self.iface.mainWindow(),
-                self.tr("Export Layers Within Area"),
-                self.tr("Impossibile recuperare i poligoni selezionati o le geometrie non sono valide."),
-            )
-            return
+            # Recupera tutti i poligoni selezionati
+            for feature_id in selected_ids:
+                feature = self._fetch_feature_by_id(polygon_layer, feature_id)
+                if feature is not None and feature.geometry() and not feature.geometry().isEmpty():
+                    features.append(feature)
+
+            if not features:
+                QMessageBox.warning(
+                    self.iface.mainWindow(),
+                    self.tr("Export Layers Within Area"),
+                    self.tr("Impossibile recuperare i poligoni selezionati o le geometrie non sono valide."),
+                )
+                return
+        # Per "all_features", features rimane una lista vuota
 
         layers = dialog.selected_layers()
         if not layers:
@@ -125,28 +131,24 @@ class ExportLayersWithinAreaPlugin:
                 self.tr("Nessun layer selezionato per l'esportazione."),
             )
             return
-        
+
         self._save_selected_layers_for_export(dialog.layers_to_export())
 
-        exporter = LayerExporter(polygon_layer, features, layers, output_directory)
-        try:
-            exported_data = exporter.export()
-            export_subdirectory = exporter.get_export_directory()
-        except ExportError as exc:
-            QgsMessageLog.logMessage(str(exc), "ExportLayersWithinArea", level=Qgis.Critical)
-            QMessageBox.critical(
-                self.iface.mainWindow(),
-                self.tr("Export Layers Within Area"),
-                str(exc),
-            )
-            return
+        # Mostra la barra di progresso
+        mode_text = "tutti gli elementi" if export_mode == "all_features" else "elementi nei poligoni selezionati"
+        self._show_progress(f"Esportazione {mode_text}...")
 
-        self.iface.messageBar().pushSuccess(
-            self.tr("Export Layers Within Area"),
-            self.tr("Esportazione completata: {count} file creati").format(count=len(exported_data)),
-        )
+        # Crea il worker thread
+        self.export_worker = ExportWorker(polygon_layer, features, layers, output_directory)
 
-        self._create_qgis_project(exported_data, export_subdirectory)
+        # Connette i segnali del worker
+        self.export_worker.progress_updated.connect(self._on_export_progress)
+        self.export_worker.export_finished.connect(self._on_export_finished)
+        self.export_worker.export_error.connect(self._on_export_error)
+        self.export_worker.export_cancelled.connect(self._on_export_cancelled)
+
+        # Avvia l'esportazione in background
+        self.export_worker.start()
 
     def _create_qgis_project(self, exported_data: List[Tuple[str, QgsMapLayer]], output_directory: str) -> None:
         project = QgsProject.instance()
@@ -255,12 +257,25 @@ class ExportLayersWithinAreaPlugin:
                     # Imposta la visibilità del nodo dell'albero del layer uguale a quella del layer originale
                     tree_layer_node.setItemVisibilityChecked(child.isVisible())
                     
-                    # Copia le impostazioni di scale visibility
-                    if isinstance(child, QgsLayerTreeLayer):
-                        tree_layer_node.setScaleBasedVisibility(child.scaleBasedVisibility())
-                        if child.scaleBasedVisibility():
-                            tree_layer_node.setMinimumScale(child.minimumScale())
-                            tree_layer_node.setMaximumScale(child.maximumScale())
+                    # Copia le impostazioni di scale visibility dal layer originale al nuovo layer
+                    if isinstance(child, QgsLayerTreeLayer) and new_layer is not None:
+                        try:
+                            # Le impostazioni di scale visibility sono sul layer, non sul node dell'albero
+                            original_layer = child.layer()
+                            if original_layer and hasattr(original_layer, 'hasScaleBasedVisibility') and hasattr(new_layer, 'setScaleBasedVisibility'):
+                                if original_layer.hasScaleBasedVisibility():
+                                    new_layer.setScaleBasedVisibility(True)
+                                    if hasattr(original_layer, 'minimumScale') and hasattr(original_layer, 'maximumScale'):
+                                        if hasattr(new_layer, 'setMinimumScale') and hasattr(new_layer, 'setMaximumScale'):
+                                            new_layer.setMinimumScale(original_layer.minimumScale())
+                                            new_layer.setMaximumScale(original_layer.maximumScale())
+                        except Exception as e:
+                            # In caso di errore con le impostazioni di scale visibility, continua senza errori
+                            QgsMessageLog.logMessage(
+                                f"Impossibile copiare le impostazioni di scale visibility per il layer {new_layer.name()}: {str(e)}",
+                                "ExportLayersWithinArea",
+                                level=Qgis.Warning,
+                            )
                     
                     group_contains_exported_layers = True
             elif child.nodeType() == QgsLayerTree.NodeGroup:
@@ -331,4 +346,78 @@ class ExportLayersWithinAreaPlugin:
 
     def _settings(self) -> QSettings:
         return QSettings("ExportLayersWithinArea", "Plugin")
+
+    def _show_progress(self, message: str = "Esportazione in corso...") -> None:
+        """Mostra la barra di progresso nella barra di stato."""
+        if self.progress_message_item is None:
+            self.progress_message_item = self.iface.messageBar().createMessage(message)
+            self.progress_bar = QProgressBar()
+            self.progress_bar.setRange(0, 100)
+            self.progress_bar.setValue(0)
+            self.progress_message_item.layout().addWidget(self.progress_bar)
+            self.iface.messageBar().pushWidget(self.progress_message_item, Qgis.Info)
+
+    def _update_progress(self, value: int, message: str) -> None:
+        """Aggiorna il progresso nella barra di stato."""
+        if self.progress_bar is not None:
+            self.progress_bar.setValue(value)
+        if self.progress_message_item is not None:
+            self.progress_message_item.setText(message)
+
+    def _hide_progress(self) -> None:
+        """Nasconde la barra di progresso."""
+        if self.progress_message_item is not None:
+            self.iface.messageBar().clearWidgets()
+            self.progress_message_item = None
+            self.progress_bar = None
+
+    def _on_export_progress(self, value: int, message: str) -> None:
+        """Gestisce gli aggiornamenti del progresso dal worker thread."""
+        self._update_progress(value, message)
+
+    def _on_export_finished(self, exported_data: List[Tuple[str, QgsMapLayer]], export_directory: str) -> None:
+        """Gestisce il completamento dell'esportazione."""
+        self._hide_progress()
+
+        # Pulisce il worker
+        if self.export_worker is not None:
+            self.export_worker = None
+
+        # Mostra messaggio di successo
+        self.iface.messageBar().pushSuccess(
+            self.tr("Export Layers Within Area"),
+            self.tr("Esportazione completata: {count} file creati").format(count=len(exported_data)),
+        )
+
+        # Crea il progetto QGIS
+        self._create_qgis_project(exported_data, export_directory)
+
+    def _on_export_error(self, error_message: str) -> None:
+        """Gestisce gli errori durante l'esportazione."""
+        self._hide_progress()
+
+        # Pulisce il worker
+        if self.export_worker is not None:
+            self.export_worker = None
+
+        # Mostra messaggio di errore
+        QMessageBox.critical(
+            self.iface.mainWindow(),
+            self.tr("Export Layers Within Area"),
+            error_message,
+        )
+
+    def _on_export_cancelled(self) -> None:
+        """Gestisce la cancellazione dell'esportazione."""
+        self._hide_progress()
+
+        # Pulisce il worker
+        if self.export_worker is not None:
+            self.export_worker = None
+
+        # Mostra messaggio informativo
+        self.iface.messageBar().pushInfo(
+            self.tr("Export Layers Within Area"),
+            self.tr("Esportazione cancellata"),
+        )
 
