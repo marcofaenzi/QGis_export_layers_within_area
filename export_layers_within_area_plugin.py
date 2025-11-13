@@ -7,7 +7,7 @@ from qgis.PyQt.QtCore import QCoreApplication, QSettings
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox, QProgressBar, QPushButton
 
-from qgis.core import Qgis, QgsFeatureRequest, QgsMessageLog, QgsProject, QgsVectorLayer, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsLayerTree, QgsRasterLayer, QgsMapLayer, QgsMapSettings, QgsReferencedRectangle, QgsBrightnessContrastFilter, QgsApplication, QgsRelation, QgsRelationManager
+from qgis.core import Qgis, QgsFeatureRequest, QgsMessageLog, QgsProject, QgsVectorLayer, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsLayerTree, QgsRasterLayer, QgsMapLayer, QgsMapSettings, QgsReferencedRectangle, QgsBrightnessContrastFilter, QgsApplication
 
 from .config_dialog import ConfigDialog
 from .exporter import ExportError, LayerExporter
@@ -139,22 +139,6 @@ class ExportLayersWithinAreaPlugin:
 
         self._save_selected_layers_for_export(dialog.layers_to_export())
 
-        # Verifica l'accessibilità dei layer connessi a database prima di iniziare l'esportazione
-        db_layers_issues = self._check_database_layers_accessibility(layers)
-        if db_layers_issues:
-            reply = QMessageBox.warning(
-                self.iface.mainWindow(),
-                self.tr("Problemi di connessione database"),
-                self.tr("Alcuni layer potrebbero avere problemi di connessione al database:\n\n{issues}\n\n"
-                       "Assicurati che le credenziali del database siano salvate nel progetto QGIS "
-                       "(Layer → Proprietà → Origine → Memorizza nella configurazione del progetto).\n\n"
-                       "Vuoi continuare comunque?").format(issues="\n".join(db_layers_issues)),
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
-            )
-            if reply == QMessageBox.StandardButton.No:
-                return
-
         # Controlla se c'è già un'esportazione in corso
         if self.export_worker is not None and self.export_worker.isRunning():
             reply = QMessageBox.question(
@@ -188,11 +172,7 @@ class ExportLayersWithinAreaPlugin:
         project = QgsProject.instance()
         
         new_project = QgsProject()
-
-        # Usa il nome del progetto corrente per il file esportato
-        current_project_name = project.baseName() or "exported_project"
-        qgz_filename = f"{current_project_name}_exported.qgz"
-        new_project.setFileName(os.path.join(output_directory, qgz_filename))
+        new_project.setFileName(os.path.join(output_directory, "exported_layers_project.qgz"))
 
         # Imposta il CRS del nuovo progetto uguale a quello del progetto originale
         new_project.setCrs(project.crs())
@@ -320,12 +300,15 @@ class ExportLayersWithinAreaPlugin:
         # Chiamata iniziale a _rebuild_layer_tree
         self._rebuild_layer_tree(original_root, new_root, exported_layers_map)
 
+<<<<<<< HEAD
         # Applica le configurazioni delle etichette ora che tutti i layer sono stati aggiunti
         self._apply_pending_labeling(pending_labeling)
 
         # Copia le relazioni dal progetto originale al nuovo progetto
         self._copy_project_relations(project, new_project, exported_layers_map)
 
+=======
+>>>>>>> parent of c3aef7c (versione 1.4)
         if not new_project.write():
             QgsMessageLog.logMessage(
                 f"Impossibile salvare il progetto QGIS: {new_project.error().message()}",
@@ -342,14 +325,14 @@ class ExportLayersWithinAreaPlugin:
         # Apre il nuovo progetto
         self.iface.messageBar().pushInfo(
             self.tr("Export Layers Within Area"),
-            self.tr("Progetto QGIS creato: {project_path}").format(project_path=qgz_filename),
+            self.tr("Progetto QGIS creato: {project_path}").format(project_path=new_project.fileName()),
         )
 
         # Chiede all'utente se vuole aprire il nuovo progetto
         reply = QMessageBox.question(
             self.iface.mainWindow(),
             self.tr("Apri nuovo progetto?"),
-            self.tr("Vuoi aprire il progetto appena creato ({project_name})?\n\nAttenzione: il progetto corrente verrà chiuso.").format(project_name=qgz_filename),
+            self.tr("Vuoi aprire il progetto appena creato?\n\nAttenzione: il progetto corrente verrà chiuso."),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
 
@@ -557,6 +540,7 @@ class ExportLayersWithinAreaPlugin:
             self.tr("Esportazione cancellata"),
         )
 
+<<<<<<< HEAD
     def _validate_labeling_in_new_layer(self, labeling, new_layer, original_layer):
         """Valida se le etichette copiate sono utilizzabili nel nuovo layer."""
         issues = []
@@ -806,3 +790,5 @@ class ExportLayersWithinAreaPlugin:
 
         return issues
 
+=======
+>>>>>>> parent of c3aef7c (versione 1.4)
