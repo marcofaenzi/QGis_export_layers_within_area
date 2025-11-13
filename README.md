@@ -138,6 +138,9 @@ Se QGIS va in freeze durante esportazioni complesse con molti dati:
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 53f3979 (Revert "versione 1.4")
 #### Come salvare le credenziali del database nel progetto QGIS:
 1. **Per ciascun layer PostGIS nel progetto**:
    - Fai clic destro sul layer → Proprietà
@@ -191,8 +194,11 @@ Se le relazioni tra tabelle non vengono visualizzate correttamente nel progetto 
 Per esportazioni molto grandi, considera:
 - Usa la modalità "Elementi nei poligoni selezionati" per limitare l'esportazione a specifiche aree
 =======
+<<<<<<< HEAD
 =======
 >>>>>>> parent of c3aef7c (versione 1.4)
+=======
+>>>>>>> 53f3979 (Revert "versione 1.4")
 ### Limite features raggiunto
 Quando viene visualizzato l'errore "Il layer contiene troppi elementi":
 - Usa la modalità "Elementi nei poligoni selezionati" per limitare l'esportazione

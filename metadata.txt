@@ -6,13 +6,19 @@ description=Esporta i layer selezionati limitandosi agli elementi contenuti in u
 about=Il plugin permette di configurare un layer poligonale di riferimento e di esportare altri layer vettoriali limitandone i contenuti ai poligoni selezionati.
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 53f3979 (Revert "versione 1.4")
 version=1.5.1
 =======
 version=1.3
 >>>>>>> parent of c3aef7c (versione 1.4)
+<<<<<<< HEAD
 =======
 version=1.3
 >>>>>>> parent of c3aef7c (versione 1.4)
+=======
+>>>>>>> 53f3979 (Revert "versione 1.4")
 author=Marco Faenzi
 email=marco.faenzi@gmail.com
 #tracker=https://example.com/issues

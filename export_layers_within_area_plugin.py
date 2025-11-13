@@ -302,6 +302,9 @@ class ExportLayersWithinAreaPlugin:
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 53f3979 (Revert "versione 1.4")
         # Applica le configurazioni delle etichette ora che tutti i layer sono stati aggiunti
         self._apply_pending_labeling(pending_labeling)
 
@@ -310,8 +313,11 @@ class ExportLayersWithinAreaPlugin:
 
 =======
 >>>>>>> parent of c3aef7c (versione 1.4)
+<<<<<<< HEAD
 =======
 >>>>>>> parent of c3aef7c (versione 1.4)
+=======
+>>>>>>> 53f3979 (Revert "versione 1.4")
         if not new_project.write():
             QgsMessageLog.logMessage(
                 f"Impossibile salvare il progetto QGIS: {new_project.error().message()}",
@@ -545,6 +551,9 @@ class ExportLayersWithinAreaPlugin:
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 53f3979 (Revert "versione 1.4")
     def _validate_labeling_in_new_layer(self, labeling, new_layer, original_layer):
         """Valida se le etichette copiate sono utilizzabili nel nuovo layer."""
         issues = []
@@ -796,5 +805,8 @@ class ExportLayersWithinAreaPlugin:
 
 =======
 >>>>>>> parent of c3aef7c (versione 1.4)
+<<<<<<< HEAD
 =======
 >>>>>>> parent of c3aef7c (versione 1.4)
+=======
+>>>>>>> 53f3979 (Revert "versione 1.4")
