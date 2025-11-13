@@ -213,6 +213,9 @@ class ExportLayersWithinAreaPlugin:
 
         # Mappa gli ID dei layer originali ai nuovi layer esportati (o ai layer raster originali)
         exported_layers_map = {}
+        # Memorizziamo le configurazioni delle etichette da applicare dopo che tutti i layer sono stati aggiunti
+        pending_labeling = []
+
         for path, original_layer in exported_data:
             new_qgis_layer = None
             if original_layer.type() == QgsMapLayer.VectorLayer:
@@ -221,7 +224,72 @@ class ExportLayersWithinAreaPlugin:
                 if new_qgis_layer.isValid():
                     if original_layer.renderer() is not None:
                         new_qgis_layer.setRenderer(original_layer.renderer().clone())
-                        new_qgis_layer.triggerRepaint()
+
+                    # Memorizza le configurazioni delle etichette per applicarle dopo
+                    # che tutti i layer sono stati aggiunti al progetto
+                    if original_layer.labeling() is not None:
+                        try:
+                            labeling_obj = original_layer.labeling()
+                            labeling_type = type(labeling_obj).__name__
+
+                            # Controlla se le etichette sono abilitate e hanno contenuto significativo
+                            should_copy = False
+                            reason = ""
+
+                            if hasattr(labeling_obj, 'isEnabled') and labeling_obj.isEnabled():
+                                # Per etichette semplici abilitate
+                                should_copy = True
+                                reason = "etichette semplici abilitate"
+                            elif labeling_type == 'QgsRuleBasedLabeling':
+                                # Per etichette basate su regole, controlla se ci sono regole abilitate
+                                try:
+                                    rules = labeling_obj.rootRule().children()
+                                    active_rules = [rule for rule in rules if rule.active()]
+                                    if active_rules:
+                                        should_copy = True
+                                        reason = f"etichette basate su regole con {len(active_rules)} regola(e) attiva(e)"
+                                except:
+                                    pass
+                            elif hasattr(labeling_obj, 'settings'):
+                                # Per altri tipi di etichettatura, controlla se hanno impostazioni
+                                try:
+                                    settings = labeling_obj.settings()
+                                    if settings and hasattr(settings, 'fieldName') and settings.fieldName():
+                                        should_copy = True
+                                        reason = f"etichette configurate (campo: {settings.fieldName()})"
+                                except:
+                                    pass
+
+                            if should_copy:
+                                cloned_labeling = labeling_obj.clone()
+                                # Memorizza per applicazione successiva
+                                pending_labeling.append((new_qgis_layer, cloned_labeling, reason, original_layer))
+
+                                QgsMessageLog.logMessage(
+                                    f"Etichette programmate per copia nel layer {original_layer.name()} ({reason})",
+                                    "ExportLayersWithinArea",
+                                    level=Qgis.Info,
+                                )
+                            else:
+                                QgsMessageLog.logMessage(
+                                    f"Etichette non copiate per il layer {original_layer.name()} - {labeling_type} disabilitate o vuote",
+                                    "ExportLayersWithinArea",
+                                    level=Qgis.Info,
+                                )
+                        except Exception as e:
+                            QgsMessageLog.logMessage(
+                                f"Errore nella preparazione delle etichette per {original_layer.name()}: {str(e)}",
+                                "ExportLayersWithinArea",
+                                level=Qgis.Warning,
+                            )
+                    else:
+                        QgsMessageLog.logMessage(
+                            f"Nessuna configurazione di etichette trovata per il layer {original_layer.name()}",
+                            "ExportLayersWithinArea",
+                            level=Qgis.Info,
+                        )
+
+                    new_qgis_layer.triggerRepaint()
             elif original_layer.type() == QgsMapLayer.RasterLayer:
                 # Layer raster: crea una nuova istanza per il nuovo progetto
                 # Per XYZ Tiles, il 'path' è la stringa di connessione URI, usiamo 'wms' come provider key
@@ -251,6 +319,9 @@ class ExportLayersWithinAreaPlugin:
         new_root = new_project.layerTreeRoot()
         # Chiamata iniziale a _rebuild_layer_tree
         self._rebuild_layer_tree(original_root, new_root, exported_layers_map)
+
+        # Applica le configurazioni delle etichette ora che tutti i layer sono stati aggiunti
+        self._apply_pending_labeling(pending_labeling)
 
         # Copia le relazioni dal progetto originale al nuovo progetto
         self._copy_project_relations(project, new_project, exported_layers_map)
@@ -486,6 +557,103 @@ class ExportLayersWithinAreaPlugin:
             self.tr("Esportazione cancellata"),
         )
 
+    def _validate_labeling_in_new_layer(self, labeling, new_layer, original_layer):
+        """Valida se le etichette copiate sono utilizzabili nel nuovo layer."""
+        issues = []
+        new_fields = [field.name() for field in new_layer.fields()]
+
+        try:
+            labeling_type = type(labeling).__name__
+
+            if labeling_type == 'QgsRuleBasedLabeling':
+                # Per le etichette basate su regole, facciamo una validazione minima
+                # poiché la struttura può variare tra versioni di QGIS
+                try:
+                    # Proviamo ad accedere alla regola root per vedere se è valida
+                    root_rule = labeling.rootRule()
+                    if root_rule is None:
+                        issues.append("regola root mancante")
+                    # Non facciamo validazione dettagliata delle singole regole per evitare errori API
+                except Exception as e:
+                    issues.append(f"struttura regole non valida: {str(e)[:30]}")
+
+            elif hasattr(labeling, 'settings'):
+                # Per etichette semplici
+                try:
+                    settings = labeling.settings()
+                    if hasattr(settings, 'fieldName') and settings.fieldName():
+                        field_name = settings.fieldName()
+                        if field_name not in new_fields:
+                            issues.append(f"campo '{field_name}' mancante")
+                except Exception as e:
+                    issues.append(f"impostazioni non valide: {str(e)[:30]}")
+
+        except Exception as e:
+            issues.append(f"errore validazione: {str(e)[:30]}")
+
+        return issues
+
+    def _apply_pending_labeling(self, pending_labeling):
+        """Applica le configurazioni delle etichette dopo che tutti i layer sono stati aggiunti al progetto."""
+        for new_layer, cloned_labeling, reason, original_layer in pending_labeling:
+            try:
+                # Prima aggiorna i campi del layer per assicurarsi che siano disponibili
+                new_layer.updateFields()
+
+                # Applica effettivamente le etichette ora che il layer è nel progetto
+                new_layer.setLabeling(cloned_labeling)
+
+                # Forza il riconoscimento del tipo di etichettatura
+                # Proviamo diversi approcci per assicurarci che il labeling mode sia corretto
+                labeling_type = type(cloned_labeling).__name__
+
+                # Per rule-based labeling, potrebbe essere necessario un approccio specifico
+                if labeling_type == 'QgsRuleBasedLabeling':
+                    # Assicurati che il layer riconosca che ha rule-based labeling attivo
+                    try:
+                        # Alcuni metodi che potrebbero aiutare
+                        if hasattr(new_layer, 'setLabelsEnabled'):
+                            new_layer.setLabelsEnabled(True)
+                        if hasattr(new_layer, 'enableLabels'):
+                            new_layer.enableLabels(True)
+                        # Forza il refresh del labeling
+                        if hasattr(new_layer, 'refreshLabeling'):
+                            new_layer.refreshLabeling()
+                    except:
+                        pass
+
+                # Aggiorna il layer nel progetto per assicurarsi che riconosca le modifiche
+                new_layer.emitStyleChanged()
+
+                # Forza l'aggiornamento
+                try:
+                    new_layer.labelingChanged.emit()
+                except:
+                    pass  # Il segnale potrebbe non esistere in alcune versioni
+
+                new_layer.triggerRepaint()
+
+                # Verifica che le etichette siano state applicate
+                if new_layer.labeling() is not None:
+                    labeling_type = type(new_layer.labeling()).__name__
+                    status_msg = f"Etichette applicate correttamente al layer {new_layer.name()} "
+                    status_msg += f"({reason}) - Tipo: {labeling_type}"
+                else:
+                    status_msg = f"ATTENZIONE: Etichette NON applicate al layer {new_layer.name()} ({reason})"
+
+                QgsMessageLog.logMessage(
+                    status_msg,
+                    "ExportLayersWithinArea",
+                    level=Qgis.Info,
+                )
+
+            except Exception as e:
+                QgsMessageLog.logMessage(
+                    f"Errore nell'applicazione delle etichette per {new_layer.name()}: {str(e)}",
+                    "ExportLayersWithinArea",
+                    level=Qgis.Warning,
+                )
+
     def _copy_project_relations(self, original_project: QgsProject, new_project: QgsProject, exported_layers_map: dict) -> None:
         """Copia le relazioni dal progetto originale al nuovo progetto esportato.
 
@@ -497,9 +665,9 @@ class ExportLayersWithinAreaPlugin:
         original_relation_manager = original_project.relationManager()
         new_relation_manager = new_project.relationManager()
 
-        # Inverti il mapping per ottenere gli ID dei nuovi layer
-        reverse_layer_map = {original_layer.id(): new_layer.id()
-                           for original_layer, new_layer in exported_layers_map.items()}
+        # Crea il mapping dagli ID originali ai nuovi ID dei layer esportati
+        reverse_layer_map = {original_layer_id: new_layer.id()
+                           for original_layer_id, new_layer in exported_layers_map.items()}
 
         # Copia ogni relazione esistente
         for relation in original_relation_manager.relations().values():

@@ -63,7 +63,7 @@ Il plugin genera:
 ### File esportati
 - **Layer vettoriali**: esportati in formato GeoPackage (.gpkg)
 - **Layer raster**: conservati con le loro impostazioni originali
-- **Progetto QGIS**: file .qgz contenente tutti i layer esportati con la stessa struttura ad albero del progetto originale
+- **Progetto QGIS**: file .qgz contenente tutti i layer esportati con la stessa struttura ad albero del progetto originale, incluse le relazioni tra tabelle
 
 ### Struttura cartella di output
 ```
@@ -86,9 +86,15 @@ cartella_esportazione/
 
 ### Conservazione delle proprietà dei layer
 - **Stili e renderer**: mantenuti nel progetto esportato
+- **Etichette (labels)**: impostazioni di etichettatura copiate solo se effettivamente abilitate e configurate (validazione semplificata per compatibilità versioni QGIS)
 - **Visibilità**: rispettata la configurazione di visibilità dei layer
 - **Scala di visibilità**: conservate le impostazioni di scala minima/massima
 - **Opacità**: mantenuta per i layer raster
+
+### Gestione delle relazioni
+- **Relazioni tra tabelle**: vengono copiate automaticamente nel progetto esportato
+- **Solo relazioni complete**: vengono incluse solo le relazioni dove entrambi i layer correlati sono stati esportati
+- **Log delle operazioni**: vengono registrati nel log di QGIS i dettagli su quali relazioni sono state copiate o saltate
 
 ### Barra di progresso
 - Monitoraggio in tempo reale dell'avanzamento dell'esportazione
@@ -97,7 +103,7 @@ cartella_esportazione/
 ### Ottimizzazioni per database e performance
 - **Gestione timeout connessioni**: retry automatico per connessioni database scadute
 - **Query ottimizzate**: utilizzo di bounding box spaziali per ridurre il carico sui database
-- **Limite features**: massimo 10.000 features per esportazione in modalità "tutti gli elementi"
+- **Nessun limite**: esportazione di tutti gli elementi disponibili nei layer selezionati
 - **Controlli cancellazione**: possibilità di interrompere operazioni lunghe in qualsiasi momento
 - **Buffer spaziale**: piccolo buffer aggiunto alle bounding box per evitare perdita di features ai bordi
 
@@ -146,10 +152,15 @@ Se QGIS va in freeze durante esportazioni complesse con molti dati:
    - Assicurati che l'autenticazione sia configurata correttamente
    - Verifica che i layer utilizzino l'autenticazione master
 
-### Limite features raggiunto
-Quando viene visualizzato l'errore "Il layer contiene troppi elementi":
-- Usa la modalità "Elementi nei poligoni selezionati" per limitare l'esportazione
+### Esportazioni di grandi dimensioni
+Per esportazioni molto grandi, considera:
+- Usa la modalità "Elementi nei poligoni selezionati" per limitare l'esportazione a specifiche aree
 - Effettua esportazioni separate per porzioni più piccole dell'area di interesse
+- Usa il pulsante "Annulla" se l'esportazione sta impiegando troppo tempo
+
+## Cronologia delle modifiche
+
+Vedi [CHANGELOG.md](CHANGELOG.md) per la cronologia completa delle modifiche e delle nuove funzionalità.
 
 ## Supporto
 
