@@ -7,7 +7,7 @@ from qgis.PyQt.QtCore import QCoreApplication, QSettings
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox, QProgressBar, QPushButton
 
-from qgis.core import Qgis, QgsFeatureRequest, QgsMessageLog, QgsProject, QgsVectorLayer, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsLayerTree, QgsRasterLayer, QgsMapLayer, QgsMapSettings, QgsReferencedRectangle, QgsBrightnessContrastFilter, QgsApplication
+from qgis.core import Qgis, QgsFeatureRequest, QgsMessageLog, QgsProject, QgsVectorLayer, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsLayerTree, QgsRasterLayer, QgsMapLayer, QgsMapSettings, QgsReferencedRectangle, QgsBrightnessContrastFilter, QgsApplication, QgsRelation, QgsRelationManager
 
 from .config_dialog import ConfigDialog
 from .exporter import ExportError, LayerExporter
@@ -139,6 +139,22 @@ class ExportLayersWithinAreaPlugin:
 
         self._save_selected_layers_for_export(dialog.layers_to_export())
 
+        # Verifica l'accessibilità dei layer connessi a database prima di iniziare l'esportazione
+        db_layers_issues = self._check_database_layers_accessibility(layers)
+        if db_layers_issues:
+            reply = QMessageBox.warning(
+                self.iface.mainWindow(),
+                self.tr("Problemi di connessione database"),
+                self.tr("Alcuni layer potrebbero avere problemi di connessione al database:\n\n{issues}\n\n"
+                       "Assicurati che le credenziali del database siano salvate nel progetto QGIS "
+                       "(Layer → Proprietà → Origine → Memorizza nella configurazione del progetto).\n\n"
+                       "Vuoi continuare comunque?").format(issues="\n".join(db_layers_issues)),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.No:
+                return
+
         # Controlla se c'è già un'esportazione in corso
         if self.export_worker is not None and self.export_worker.isRunning():
             reply = QMessageBox.question(
@@ -172,7 +188,11 @@ class ExportLayersWithinAreaPlugin:
         project = QgsProject.instance()
         
         new_project = QgsProject()
-        new_project.setFileName(os.path.join(output_directory, "exported_layers_project.qgz"))
+
+        # Usa il nome del progetto corrente per il file esportato
+        current_project_name = project.baseName() or "exported_project"
+        qgz_filename = f"{current_project_name}_exported.qgz"
+        new_project.setFileName(os.path.join(output_directory, qgz_filename))
 
         # Imposta il CRS del nuovo progetto uguale a quello del progetto originale
         new_project.setCrs(project.crs())
@@ -232,6 +252,9 @@ class ExportLayersWithinAreaPlugin:
         # Chiamata iniziale a _rebuild_layer_tree
         self._rebuild_layer_tree(original_root, new_root, exported_layers_map)
 
+        # Copia le relazioni dal progetto originale al nuovo progetto
+        self._copy_project_relations(project, new_project, exported_layers_map)
+
         if not new_project.write():
             QgsMessageLog.logMessage(
                 f"Impossibile salvare il progetto QGIS: {new_project.error().message()}",
@@ -248,14 +271,14 @@ class ExportLayersWithinAreaPlugin:
         # Apre il nuovo progetto
         self.iface.messageBar().pushInfo(
             self.tr("Export Layers Within Area"),
-            self.tr("Progetto QGIS creato: {project_path}").format(project_path=new_project.fileName()),
+            self.tr("Progetto QGIS creato: {project_path}").format(project_path=qgz_filename),
         )
 
         # Chiede all'utente se vuole aprire il nuovo progetto
         reply = QMessageBox.question(
             self.iface.mainWindow(),
             self.tr("Apri nuovo progetto?"),
-            self.tr("Vuoi aprire il progetto appena creato?\n\nAttenzione: il progetto corrente verrà chiuso."),
+            self.tr("Vuoi aprire il progetto appena creato ({project_name})?\n\nAttenzione: il progetto corrente verrà chiuso.").format(project_name=qgz_filename),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
 
@@ -462,4 +485,102 @@ class ExportLayersWithinAreaPlugin:
             self.tr("Export Layers Within Area"),
             self.tr("Esportazione cancellata"),
         )
+
+    def _copy_project_relations(self, original_project: QgsProject, new_project: QgsProject, exported_layers_map: dict) -> None:
+        """Copia le relazioni dal progetto originale al nuovo progetto esportato.
+
+        Args:
+            original_project: Il progetto originale
+            new_project: Il nuovo progetto esportato
+            exported_layers_map: Mappatura dagli ID originali ai nuovi layer esportati
+        """
+        original_relation_manager = original_project.relationManager()
+        new_relation_manager = new_project.relationManager()
+
+        # Inverti il mapping per ottenere gli ID dei nuovi layer
+        reverse_layer_map = {original_layer.id(): new_layer.id()
+                           for original_layer, new_layer in exported_layers_map.items()}
+
+        # Copia ogni relazione esistente
+        for relation in original_relation_manager.relations().values():
+            referencing_layer_id = relation.referencingLayerId()
+            referenced_layer_id = relation.referencedLayerId()
+
+            # Verifica se entrambi i layer della relazione sono stati esportati
+            if (referencing_layer_id in reverse_layer_map and
+                referenced_layer_id in reverse_layer_map):
+
+                try:
+                    # Crea una nuova relazione con i riferimenti ai nuovi layer
+                    new_relation = QgsRelation()
+                    new_relation.setId(relation.id())
+                    new_relation.setName(relation.name())
+                    new_relation.setReferencingLayer(reverse_layer_map[referencing_layer_id])
+                    new_relation.setReferencedLayer(reverse_layer_map[referenced_layer_id])
+                    new_relation.setReferencingLayerFields(relation.referencingFields())
+                    new_relation.setReferencedLayerFields(relation.referencedFields())
+                    new_relation.setStrength(relation.strength())
+
+                    # Aggiungi la relazione al nuovo progetto
+                    if new_relation_manager.addRelation(new_relation):
+                        QgsMessageLog.logMessage(
+                            f"Relazione '{relation.name()}' copiata nel progetto esportato",
+                            "ExportLayersWithinArea",
+                            level=Qgis.Info,
+                        )
+                    else:
+                        QgsMessageLog.logMessage(
+                            f"Impossibile copiare la relazione '{relation.name()}'",
+                            "ExportLayersWithinArea",
+                            level=Qgis.Warning,
+                        )
+                except Exception as e:
+                    QgsMessageLog.logMessage(
+                        f"Errore nella copia della relazione '{relation.name()}': {str(e)}",
+                        "ExportLayersWithinArea",
+                        level=Qgis.Warning,
+                    )
+            else:
+                # Salta le relazioni che coinvolgono layer non esportati
+                missing_layers = []
+                if referencing_layer_id not in reverse_layer_map:
+                    missing_layers.append("referencing")
+                if referenced_layer_id not in reverse_layer_map:
+                    missing_layers.append("referenced")
+
+                QgsMessageLog.logMessage(
+                    f"Relazione '{relation.name()}' saltata: layer {', '.join(missing_layers)} non esportato(i)",
+                    "ExportLayersWithinArea",
+                    level=Qgis.Info,
+                )
+
+    def _check_database_layers_accessibility(self, layers: List[QgsMapLayer]) -> List[str]:
+        """Verifica l'accessibilità dei layer connessi a database prima dell'esportazione.
+
+        Returns:
+            Lista di stringhe con i problemi riscontrati per ciascun layer
+        """
+        issues = []
+
+        for layer in layers:
+            if not isinstance(layer, QgsVectorLayer):
+                continue
+
+            # Verifica se il layer è connesso a un database PostgreSQL/PostGIS
+            provider = layer.dataProvider()
+            if provider.name().lower() in ['postgres', 'postgis']:
+                try:
+                    # Prova a contare le features per verificare la connessione
+                    # Questo è un'operazione leggera che verifica l'accesso al database
+                    feature_count = layer.featureCount()
+                    if feature_count < 0:  # -1 indica errore
+                        issues.append(f"• {layer.name()}: Impossibile accedere al database (conteggio features fallito)")
+                except Exception as e:
+                    error_str = str(e).lower()
+                    if any(keyword in error_str for keyword in ['password', 'authentication', 'fe_sendauth', 'connection']):
+                        issues.append(f"• {layer.name()}: Problema di autenticazione al database ({str(e)[:50]}...)")
+                    else:
+                        issues.append(f"• {layer.name()}: Errore di connessione al database ({str(e)[:50]}...)")
+
+        return issues
 

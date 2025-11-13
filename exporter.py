@@ -58,7 +58,13 @@ def _execute_with_retry(operation: Callable, max_retries: int = 3, delay: float 
                     time.sleep(delay)
                     continue
                 else:
-                    raise ExportError(f"Connessione al database fallita dopo {max_retries} tentativi: {str(e)}")
+                    if any(keyword in str(e).lower() for keyword in ['password', 'fe_sendauth', 'authentication']):
+                        raise ExportError(f"Autenticazione al database fallita dopo {max_retries} tentativi.\n\n"
+                                        f"Dettagli errore: {str(e)}\n\n"
+                                        f"Suggerimento: Assicurati che le credenziali del database siano salvate nel progetto QGIS "
+                                        f"(Layer → Proprietà → Origine → Memorizza nella configurazione del progetto).")
+                    else:
+                        raise ExportError(f"Connessione al database fallita dopo {max_retries} tentativi: {str(e)}")
             else:
                 # Errore non legato alla connessione, non riprovare
                 raise ExportError(str(e))
@@ -216,11 +222,6 @@ class LayerExporter:
 
         request.setFilterRect(buffered_bbox)
 
-        # Ottimizzazioni per le performance
-        request.setFlags(QgsFeatureRequest.NoGeometry | QgsFeatureRequest.SubsetOfAttributes)
-        # Rimuovi il flag NoGeometry perché abbiamo bisogno della geometria per il ritaglio
-        request.setFlags(request.flags() & ~QgsFeatureRequest.NoGeometry)
-
         def get_features_operation():
             features_iterator = layer.getFeatures(request)
             for feature in features_iterator:
@@ -236,10 +237,16 @@ class LayerExporter:
 
                 new_feature = QgsFeature(feature)
                 new_geometry = self._clip_geometry(layer, geometry, polygon_geom)
-                if new_geometry is None or new_geometry.isEmpty():
-                    continue
-                new_feature.setGeometry(new_geometry)
-                result.append(new_feature)
+
+                # Se il clipping ha successo, usa la geometria ritagliata
+                if new_geometry and not new_geometry.isEmpty():
+                    new_feature.setGeometry(new_geometry)
+                    result.append(new_feature)
+                # Se il clipping fallisce ma la geometria originale interseca il poligono,
+                # includi comunque la feature con la geometria originale
+                elif geometry.intersects(polygon_geom):
+                    # Mantieni la geometria originale
+                    result.append(new_feature)
 
         try:
             _execute_with_retry(get_features_operation)

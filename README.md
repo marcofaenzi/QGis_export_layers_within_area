@@ -71,9 +71,11 @@ cartella_esportazione/
 ├── layer1.gpkg
 ├── layer2.gpkg
 ├── raster1.tif
-├── exported_layers_project.qgz
+├── [nome_progetto]_exported.qgz
 └── [altri file esportati]
 ```
+
+**Nota**: Il nome del file del progetto QGIS esportato corrisponde al nome del progetto corrente (ad esempio: `mio_progetto_exported.qgz`).
 
 ## Funzionalità avanzate
 
@@ -123,9 +125,26 @@ Se QGIS va in freeze durante esportazioni complesse con molti dati:
 4. **Controlla connessione database**: assicurati che la connessione PostgreSQL/PostGIS sia stabile
 
 ### Errori di connessione database
-- **"fe_sendauth: no password supplied"**: il plugin ritenta automaticamente la connessione
+- **"fe_sendauth: no password supplied"**: il plugin ritenta automaticamente la connessione, ma è necessario salvare le credenziali
 - **Timeout connessione**: il sistema attende qualche secondo e riprova automaticamente
 - Se i problemi persistono, verifica le impostazioni di connessione al database in QGIS
+
+#### Come salvare le credenziali del database nel progetto QGIS:
+1. **Per ciascun layer PostGIS nel progetto**:
+   - Fai clic destro sul layer → Proprietà
+   - Vai alla scheda "Origine"
+   - Nella sezione "Connessione", clicca su "Memorizza nella configurazione del progetto"
+   - Inserisci username e password quando richiesti
+   - Clicca "OK" per salvare
+
+2. **Verifica che le credenziali siano salvate**:
+   - Riapri il progetto QGIS
+   - I layer dovrebbero caricarsi senza richiedere nuovamente la password
+
+3. **Se usi l'autenticazione master di QGIS**:
+   - Vai su Impostazioni → Opzioni → Autenticazione
+   - Assicurati che l'autenticazione sia configurata correttamente
+   - Verifica che i layer utilizzino l'autenticazione master
 
 ### Limite features raggiunto
 Quando viene visualizzato l'errore "Il layer contiene troppi elementi":
