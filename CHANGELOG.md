@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.5] - 2025-11-14
+
+### Fixed
+- **Widget Value Relation**: I widget di tipo "Value Relation" ora mantengono correttamente il riferimento ai layer esportati invece di essere convertiti in "Text Edit"
+- **Aggiornamento riferimenti layer**: I riferimenti ai layer nei widget Value Relation vengono automaticamente aggiornati per puntare ai nuovi layer esportati
+- **Timing aggiornamento**: Lo aggiornamento dei widget Value Relation ora avviene dopo la copia delle relazioni per garantire che tutti i layer siano disponibili
+
+### Added
+- **Logging diagnostico dettagliato**: Aggiunto logging verboso per ogni campo e widget analizzato, facilitando il debug
+- **Validazione widget**: Logging completo della configurazione dei widget Value Relation
+- **Gestione layer mancanti**: Se un widget Value Relation punta a un layer non esportato, viene loggato un warning con dettagli
+
+### Changed
+- **Ordine operazioni**: L'aggiornamento dei widget Value Relation ora avviene come ultima operazione prima del salvataggio del progetto
+
+## [1.5.4] - 2025-11-14
+
+### Added
+- **Copia maschere attributi**: Le configurazioni dei form attributi (EditFormConfig) vengono ora copiate dai layer originali ai layer esportati
+- **Preservazione widget**: I tipi di widget per ogni campo vengono mantenuti nel progetto esportato
+- **Conservazione layout form**: Il layout dei form (tabs, gruppi) viene preservato nell'esportazione
+
+### Changed
+- **Gestione form**: Migliorata la gestione delle configurazioni dei form con logging dettagliato degli errori
+
 ## [1.5.3] - 2025-11-14
 
 ### Added

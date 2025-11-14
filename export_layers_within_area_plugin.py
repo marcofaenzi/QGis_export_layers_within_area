@@ -7,7 +7,25 @@ from qgis.PyQt.QtCore import QCoreApplication, QSettings
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox, QProgressBar, QPushButton
 
-from qgis.core import Qgis, QgsFeatureRequest, QgsMessageLog, QgsProject, QgsVectorLayer, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsLayerTree, QgsRasterLayer, QgsMapLayer, QgsMapSettings, QgsReferencedRectangle, QgsBrightnessContrastFilter, QgsApplication, QgsRelation, QgsRelationManager
+from qgis.core import (
+    Qgis,
+    QgsFeatureRequest,
+    QgsMessageLog,
+    QgsProject,
+    QgsVectorLayer,
+    QgsLayerTreeGroup,
+    QgsLayerTreeLayer,
+    QgsLayerTree,
+    QgsRasterLayer,
+    QgsMapLayer,
+    QgsMapSettings,
+    QgsReferencedRectangle,
+    QgsBrightnessContrastFilter,
+    QgsApplication,
+    QgsRelation,
+    QgsRelationManager,
+    QgsEditorWidgetSetup,
+)
 
 from .config_dialog import ConfigDialog
 from .exporter import ExportError, LayerExporter
@@ -225,6 +243,42 @@ class ExportLayersWithinAreaPlugin:
                     if original_layer.renderer() is not None:
                         new_qgis_layer.setRenderer(original_layer.renderer().clone())
 
+                    # Copia le configurazioni dei form attributi (maschere) e i widget dei campi
+                    try:
+                        # Copia la configurazione del form (layout, tabs, ecc.)
+                        original_config = original_layer.editFormConfig()
+                        new_qgis_layer.setEditFormConfig(original_config)
+
+                        # Copia i widget editor per ogni campo (inclusi i Value Relation) basandosi sul NOME del campo
+                        original_fields = original_layer.fields()
+                        new_fields = new_qgis_layer.fields()
+
+                        original_index_by_name = {
+                            original_fields.at(i).name(): i for i in range(original_fields.count())
+                        }
+
+                        copied_widgets = 0
+                        for new_idx in range(new_fields.count()):
+                            field_name = new_fields.at(new_idx).name()
+                            if field_name in original_index_by_name:
+                                orig_idx = original_index_by_name[field_name]
+                                ew_setup = original_layer.editorWidgetSetup(orig_idx)
+                                new_qgis_layer.setEditorWidgetSetup(new_idx, ew_setup)
+                                copied_widgets += 1
+
+                        QgsMessageLog.logMessage(
+                            f"Configurazione form attributi copiata per il layer {original_layer.name()}. "
+                            f"Widget editor copiati: {copied_widgets}/{new_fields.count()} (match per nome campo).",
+                            "ExportLayersWithinArea",
+                            level=Qgis.Info,
+                        )
+                    except Exception as e:
+                        QgsMessageLog.logMessage(
+                            f"Errore nella copia della configurazione form/widget per {original_layer.name()}: {str(e)}",
+                            "ExportLayersWithinArea",
+                            level=Qgis.Warning,
+                        )
+
                     # Memorizza le configurazioni delle etichette per applicarle dopo
                     # che tutti i layer sono stati aggiunti al progetto
                     if original_layer.labeling() is not None:
@@ -325,6 +379,10 @@ class ExportLayersWithinAreaPlugin:
 
         # Copia le relazioni dal progetto originale al nuovo progetto
         self._copy_project_relations(project, new_project, exported_layers_map)
+
+        # Aggiorna i widget Value Relation nei form per puntare ai nuovi layer esportati
+        # Deve essere fatto dopo che tutti i layer sono nel progetto e le relazioni sono copiate
+        self._update_value_relation_widgets(new_project, exported_layers_map)
 
         if not new_project.write():
             QgsMessageLog.logMessage(
@@ -721,6 +779,133 @@ class ExportLayersWithinAreaPlugin:
                     "ExportLayersWithinArea",
                     level=Qgis.Info,
                 )
+
+    def _update_value_relation_widgets(self, new_project: QgsProject, exported_layers_map: dict) -> None:
+        """Aggiorna i widget Value Relation nei form per puntare ai nuovi layer esportati.
+        
+        Args:
+            new_project: Il progetto esportato
+            exported_layers_map: Mappatura dagli ID originali ai nuovi layer esportati
+        """
+        QgsMessageLog.logMessage(
+            f"Inizio aggiornamento widget Value Relation per {len(exported_layers_map)} layer",
+            "ExportLayersWithinArea",
+            level=Qgis.Info,
+        )
+        
+        # Crea il mapping dagli ID originali ai nuovi ID dei layer esportati
+        reverse_layer_map = {original_layer_id: new_layer.id()
+                           for original_layer_id, new_layer in exported_layers_map.items()}
+        
+        QgsMessageLog.logMessage(
+            f"Mapping layer creato: {len(reverse_layer_map)} corrispondenze",
+            "ExportLayersWithinArea",
+            level=Qgis.Info,
+        )
+        
+        # Per ogni layer esportato, aggiorna i widget Value Relation
+        for original_layer_id, new_layer in exported_layers_map.items():
+            if new_layer.type() != QgsMapLayer.VectorLayer:
+                continue
+                
+            try:
+                QgsMessageLog.logMessage(
+                    f"Analisi layer '{new_layer.name()}' (ID: {new_layer.id()})",
+                    "ExportLayersWithinArea",
+                    level=Qgis.Info,
+                )
+                
+                fields = new_layer.fields()
+                
+                # Flag per tracciare se ci sono state modifiche
+                config_modified = False
+                
+                # Per ogni campo, controlla se ha un widget Value Relation
+                for idx in range(fields.count()):
+                    field = fields.at(idx)
+                    field_name = field.name()
+                    
+                    # Ottieni la configurazione del widget direttamente dal layer
+                    widget_setup = new_layer.editorWidgetSetup(idx)
+                    widget_type = widget_setup.type()
+                    widget_config = widget_setup.config()
+                    
+                    QgsMessageLog.logMessage(
+                        f"  Campo '{field_name}' (idx {idx}): tipo widget = '{widget_type}', config keys = {list(widget_config.keys())}",
+                        "ExportLayersWithinArea",
+                        level=Qgis.Info,
+                    )
+                    
+                    # Controlla se è un widget Value Relation
+                    if widget_type == 'ValueRelation':
+                        QgsMessageLog.logMessage(
+                            f"  Widget Value Relation trovato per campo '{field_name}', config completa: {widget_config}",
+                            "ExportLayersWithinArea",
+                            level=Qgis.Info,
+                        )
+                        
+                        # Il widget Value Relation ha una chiave 'Layer' che contiene l'ID del layer
+                        if 'Layer' in widget_config:
+                            old_layer_id = widget_config['Layer']
+                            
+                            QgsMessageLog.logMessage(
+                                f"  Layer ID originale trovato: {old_layer_id}",
+                                "ExportLayersWithinArea",
+                                level=Qgis.Info,
+                            )
+                            
+                            # Se il layer riferito è stato esportato, aggiorna l'ID
+                            if old_layer_id in reverse_layer_map:
+                                new_layer_id = reverse_layer_map[old_layer_id]
+                                # Crea una nuova configurazione con l'ID aggiornato
+                                new_widget_config = dict(widget_config)
+                                new_widget_config['Layer'] = new_layer_id
+                                
+                                # Crea un nuovo setup con la configurazione aggiornata
+                                new_widget_setup = QgsEditorWidgetSetup(widget_type, new_widget_config)
+                                new_layer.setEditorWidgetSetup(idx, new_widget_setup)
+                                config_modified = True
+                                
+                                QgsMessageLog.logMessage(
+                                    f"✓ Widget Value Relation aggiornato per campo '{field_name}' in layer '{new_layer.name()}': {old_layer_id} -> {new_layer_id}",
+                                    "ExportLayersWithinArea",
+                                    level=Qgis.Info,
+                                )
+                            else:
+                                # Il layer riferito non è stato esportato, il widget diventerà Text Edit
+                                QgsMessageLog.logMessage(
+                                    f"✗ Layer riferito da Value Relation non esportato per campo '{field_name}' in layer '{new_layer.name()}'. Old ID: {old_layer_id}, disponibili: {list(reverse_layer_map.keys())}",
+                                    "ExportLayersWithinArea",
+                                    level=Qgis.Warning,
+                                )
+                        else:
+                            QgsMessageLog.logMessage(
+                                f"  Chiave 'Layer' non trovata in widget_config",
+                                "ExportLayersWithinArea",
+                                level=Qgis.Warning,
+                            )
+                
+                # Se ci sono state modifiche, i widget sono già stati aggiornati via setEditorWidgetSetup
+                if config_modified:
+                    QgsMessageLog.logMessage(
+                        f"Configurazione widget Value Relation aggiornata per layer '{new_layer.name()}'",
+                        "ExportLayersWithinArea",
+                        level=Qgis.Info,
+                    )
+                    
+            except Exception as e:
+                import traceback
+                QgsMessageLog.logMessage(
+                    f"Errore nell'aggiornamento dei widget Value Relation per layer '{new_layer.name()}': {str(e)}\n{traceback.format_exc()}",
+                    "ExportLayersWithinArea",
+                    level=Qgis.Warning,
+                )
+        
+        QgsMessageLog.logMessage(
+            "Completato aggiornamento widget Value Relation",
+            "ExportLayersWithinArea",
+            level=Qgis.Info,
+        )
 
     def _check_database_layers_accessibility(self, layers: List[QgsMapLayer]) -> List[str]:
         """Verifica l'accessibilità dei layer connessi a database prima dell'esportazione.
