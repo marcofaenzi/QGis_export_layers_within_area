@@ -135,8 +135,20 @@ class LayerExporter:
 
         for layer in self._target_layers:
             if layer.type() == QgsMapLayer.VectorLayer:
-                if use_clipping:
-                    # Logica di esportazione per layer vettoriali (con ritaglio)
+                # I layer senza geometria (tabelle) vengono sempre esportati completamente
+                # Gestisce sia NoGeometry che NullGeometry
+                geom_type = layer.geometryType()
+                if geom_type == QgsWkbTypes.NoGeometry or geom_type == QgsWkbTypes.NullGeometry:
+                    QgsMessageLog.logMessage(
+                        f"Esportazione layer senza geometria (tabella): {layer.name()}",
+                        "ExportLayersWithinArea",
+                        level=Qgis.Info,
+                    )
+                    features = self._all_features(layer)
+                    if not features:
+                        continue
+                elif use_clipping:
+                    # Logica di esportazione per layer vettoriali con geometria (con filtro spaziale)
                     geom_for_layer = QgsGeometry(union_geom)
 
                     if not geom_for_layer.isEmpty() and self._polygon_layer.crs() != layer.crs():
@@ -232,21 +244,14 @@ class LayerExporter:
                 geometry = feature.geometry()
                 if not geometry or geometry.isEmpty():
                     continue
+                
+                # Verifica se la geometria interseca il poligono
                 if not geometry.intersects(polygon_geom):
                     continue
 
+                # Includi la feature con la geometria originale, senza tagliare
                 new_feature = QgsFeature(feature)
-                new_geometry = self._clip_geometry(layer, geometry, polygon_geom)
-
-                # Se il clipping ha successo, usa la geometria ritagliata
-                if new_geometry and not new_geometry.isEmpty():
-                    new_feature.setGeometry(new_geometry)
-                    result.append(new_feature)
-                # Se il clipping fallisce ma la geometria originale interseca il poligono,
-                # includi comunque la feature con la geometria originale
-                elif geometry.intersects(polygon_geom):
-                    # Mantieni la geometria originale
-                    result.append(new_feature)
+                result.append(new_feature)
 
         try:
             _execute_with_retry(get_features_operation)
@@ -269,8 +274,12 @@ class LayerExporter:
         # Il controllo di cancellazione permette di interrompere esportazioni lunghe se necessario
         request = QgsFeatureRequest()
 
-        # Ottimizzazioni per le performance
-        request.setFlags(request.flags() & ~QgsFeatureRequest.NoGeometry)
+        # Per layer senza geometria, non caricare la geometria (non esiste)
+        # Gestisce sia NoGeometry che NullGeometry
+        geom_type = layer.geometryType()
+        has_geometry = geom_type != QgsWkbTypes.NoGeometry and geom_type != QgsWkbTypes.NullGeometry
+        if not has_geometry:
+            request.setFlags(request.flags() | QgsFeatureRequest.NoGeometry)
 
         def get_all_features_operation():
             features_iterator = layer.getFeatures(request)
@@ -279,9 +288,12 @@ class LayerExporter:
                 if self._cancellation_check and self._cancellation_check():
                     raise ExportError("Esportazione cancellata dall'utente")
 
-                geometry = feature.geometry()
-                if not geometry or geometry.isEmpty():
-                    continue
+                # Per layer con geometria, verifica che sia valida
+                if has_geometry:
+                    geometry = feature.geometry()
+                    if not geometry or geometry.isEmpty():
+                        continue
+                
                 result.append(QgsFeature(feature))
 
         try:
@@ -296,21 +308,6 @@ class LayerExporter:
             raise ExportError(error_msg)
 
         return result
-
-    def _clip_geometry(
-        self,
-        layer: QgsVectorLayer,
-        geometry: QgsGeometry,
-        polygon_geom: QgsGeometry,
-    ) -> QgsGeometry:
-        geom_type = layer.geometryType()
-        if geom_type == QgsWkbTypes.PointGeometry:
-            return geometry if geometry.within(polygon_geom) else None
-        if geom_type == QgsWkbTypes.LineGeometry:
-            return geometry.intersection(polygon_geom)
-        if geom_type == QgsWkbTypes.PolygonGeometry:
-            return geometry.intersection(polygon_geom)
-        return geometry
 
     def _export_layer(self, layer: QgsVectorLayer, features: List[QgsFeature]) -> str:
         safe_name = self._sanitize_filename(layer.name())

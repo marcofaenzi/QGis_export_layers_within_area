@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.3] - 2025-11-14
+
+### Added
+- **Supporto layer senza geometria**: I layer vettoriali senza geometria (tabelle) possono ora essere selezionati ed esportati
+- **Esportazione completa tabelle**: Le tabelle vengono sempre esportate con tutti i record, indipendentemente dal poligono di selezione
+
+### Fixed
+- **Riconoscimento tabelle**: Corretta la logica per riconoscere correttamente i layer con `NullGeometry` (valore 4) come tabelle senza geometria
+
+### Changed
+- **Dialog di selezione**: Rimosso il filtro che escludeva i layer senza geometria dalla lista di selezione
+- **Gestione esportazione tabelle**: Ottimizzata la gestione dei layer senza geometria per migliorare le performance
+- **Logging migliorato**: Aggiunto logging dettagliato per identificare correttamente i layer senza geometria
+
+## [1.5.2] - 2025-11-14
+
+### Changed
+- **Geometrie non tagliate**: Le geometrie parzialmente incluse nel poligono di selezione ora vengono incluse intere senza modificare la geometria originale
+- **Performance migliorate**: Rimossa l'operazione di clipping delle geometrie, migliorando significativamente la velocità di esportazione
+
+### Removed
+- **Clipping delle geometrie**: Rimossa la logica di ritaglio (clip/intersection) delle geometrie che intersecano il poligono di selezione
+- **Metodo `_clip_geometry`**: Rimosso il metodo non più necessario per il ritaglio geometrico
+
 ## [1.5.0] - 2025-11-13
 
 ### Added

@@ -128,19 +128,35 @@ class MainDialog(QDialog):
         for child in node.children():
             if child.nodeType() == QgsLayerTree.NodeLayer:
                 layer = child.layer()
-                # Modificato per includere layer Raster (come XYZ Tiles)
+                
+                # Log dettagliato per ogni layer trovato
+                if layer is not None:
+                    if layer.type() == QgsMapLayer.VectorLayer:
+                        geom_type = layer.geometryType()
+                        if geom_type == QgsWkbTypes.NoGeometry or geom_type == QgsWkbTypes.NullGeometry:
+                            geom_type_str = "Tabella (senza geometria)"
+                        else:
+                            geom_type_str = f"GeomType:{geom_type}"
+                    else:
+                        geom_type_str = "N/A"
+                    QgsMessageLog.logMessage(
+                        f"[DEBUG] Layer trovato: {layer.name()} | Tipo: {layer.type()} | {geom_type_str}",
+                        "ExportLayersWithinArea",
+                        Qgis.Info
+                    )
+                
+                # Modificato per includere layer Raster (come XYZ Tiles) e layer senza geometria (tabelle)
                 if layer is None or (layer.type() != QgsMapLayer.VectorLayer and layer.type() != QgsMapLayer.RasterLayer):
+                    if layer is not None:
+                        QgsMessageLog.logMessage(f"[DEBUG] Layer escluso (tipo non supportato): {layer.name()}", "ExportLayersWithinArea", Qgis.Info)
                     continue
-                # Filtra i layer vettoriali senza geometria
-                if layer.type() == QgsMapLayer.VectorLayer and layer.geometryType() == QgsWkbTypes.NoGeometry:
-                    QgsMessageLog.logMessage(f"[DEBUG] _add_children_to_tree: Escluso layer vettoriale senza geometria: {layer.name()}", "ExportLayersWithinArea", Qgis.Info)
-                    continue
+                
                 if layer == self._polygon_layer: # Escludi il layer poligonale di riferimento
-                    QgsMessageLog.logMessage(f"[DEBUG] _add_children_to_tree: Escluso layer poligono di riferimento: {layer.name()}", "ExportLayersWithinArea", Qgis.Info)
+                    QgsMessageLog.logMessage(f"[DEBUG] Layer escluso (poligono di riferimento): {layer.name()}", "ExportLayersWithinArea", Qgis.Info)
                     continue
 
-                # Nuovo log per ogni layer considerato
-                QgsMessageLog.logMessage(f"[DEBUG] _add_children_to_tree: Elaborazione layer: {layer.name()} (ID: {layer.id()}, Tipo: {layer.type()})", "ExportLayersWithinArea", Qgis.Info)
+                # Log per layer che vengono aggiunti alla lista
+                QgsMessageLog.logMessage(f"[DEBUG] Layer aggiunto alla lista: {layer.name()} (ID: {layer.id()})", "ExportLayersWithinArea", Qgis.Info)
 
                 item = QTreeWidgetItem(parent_item)
                 item.setText(0, layer.name())
