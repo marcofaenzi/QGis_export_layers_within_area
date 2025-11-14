@@ -58,7 +58,13 @@ def _execute_with_retry(operation: Callable, max_retries: int = 3, delay: float 
                     time.sleep(delay)
                     continue
                 else:
-                    raise ExportError(f"Connessione al database fallita dopo {max_retries} tentativi: {str(e)}")
+                    if any(keyword in str(e).lower() for keyword in ['password', 'fe_sendauth', 'authentication']):
+                        raise ExportError(f"Autenticazione al database fallita dopo {max_retries} tentativi.\n\n"
+                                        f"Dettagli errore: {str(e)}\n\n"
+                                        f"Suggerimento: Assicurati che le credenziali del database siano salvate nel progetto QGIS "
+                                        f"(Layer → Proprietà → Origine → Memorizza nella configurazione del progetto).")
+                    else:
+                        raise ExportError(f"Connessione al database fallita dopo {max_retries} tentativi: {str(e)}")
             else:
                 # Errore non legato alla connessione, non riprovare
                 raise ExportError(str(e))
@@ -216,11 +222,6 @@ class LayerExporter:
 
         request.setFilterRect(buffered_bbox)
 
-        # Ottimizzazioni per le performance
-        request.setFlags(QgsFeatureRequest.NoGeometry | QgsFeatureRequest.SubsetOfAttributes)
-        # Rimuovi il flag NoGeometry perché abbiamo bisogno della geometria per il ritaglio
-        request.setFlags(request.flags() & ~QgsFeatureRequest.NoGeometry)
-
         def get_features_operation():
             features_iterator = layer.getFeatures(request)
             for feature in features_iterator:
@@ -236,10 +237,16 @@ class LayerExporter:
 
                 new_feature = QgsFeature(feature)
                 new_geometry = self._clip_geometry(layer, geometry, polygon_geom)
-                if new_geometry is None or new_geometry.isEmpty():
-                    continue
-                new_feature.setGeometry(new_geometry)
-                result.append(new_feature)
+
+                # Se il clipping ha successo, usa la geometria ritagliata
+                if new_geometry and not new_geometry.isEmpty():
+                    new_feature.setGeometry(new_geometry)
+                    result.append(new_feature)
+                # Se il clipping fallisce ma la geometria originale interseca il poligono,
+                # includi comunque la feature con la geometria originale
+                elif geometry.intersects(polygon_geom):
+                    # Mantieni la geometria originale
+                    result.append(new_feature)
 
         try:
             _execute_with_retry(get_features_operation)
@@ -258,13 +265,9 @@ class LayerExporter:
         """Restituisce tutte le features di un layer senza applicare ritagli geometrici."""
         result: List[QgsFeature] = []
 
-        # Usa una richiesta con limiti per evitare di caricare tutto in memoria
-        # Questo è particolarmente importante per layer connessi a database
+        # Usa una richiesta senza limiti per esportare tutti gli elementi
+        # Il controllo di cancellazione permette di interrompere esportazioni lunghe se necessario
         request = QgsFeatureRequest()
-
-        # Limita il numero di features per evitare timeout (massimo 10000 features)
-        # L'utente può sempre fare esportazioni separate se necessario
-        request.setLimit(10000)
 
         # Ottimizzazioni per le performance
         request.setFlags(request.flags() & ~QgsFeatureRequest.NoGeometry)
@@ -290,8 +293,6 @@ class LayerExporter:
             error_msg = f"Errore nell'accesso al layer {layer.name()}: {str(e)}"
             if "password" in str(e).lower() or "connection" in str(e).lower():
                 error_msg += "\n\nPossibile timeout della connessione al database. Riprova con meno layer o considera di filtrare i dati."
-            elif "limit" in str(e).lower():
-                error_msg += "\n\nIl layer contiene troppi elementi. Usa la modalità 'Elementi nei poligoni selezionati' per limitare l'esportazione."
             raise ExportError(error_msg)
 
         return result

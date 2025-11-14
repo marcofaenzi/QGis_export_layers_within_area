@@ -4,17 +4,6 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.5.1] - 2025-11-13
-
-### Fixed
-- **Relation validation**: Improved relation copying with proper validation before adding to exported project
-- **Field existence check**: Added verification that all relation fields exist in exported layers
-- **Relation context**: Added project context setting for relations to ensure proper validation
-- **Better error reporting**: Enhanced logging for relation copying process with detailed error messages
-
-### Changed
-- **Relation export robustness**: More thorough checks before copying relations to prevent invalid relations in exported projects
-
 ## [1.5.0] - 2025-11-13
 
 ### Added
