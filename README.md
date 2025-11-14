@@ -63,7 +63,7 @@ Il plugin genera:
 ### File esportati
 - **Layer vettoriali**: esportati in formato GeoPackage (.gpkg)
 - **Layer raster**: conservati con le loro impostazioni originali
-- **Progetto QGIS**: file .qgz contenente tutti i layer esportati con la stessa struttura ad albero del progetto originale, incluse le relazioni tra tabelle
+- **Progetto QGIS**: file .qgz contenente tutti i layer esportati con la stessa struttura ad albero del progetto originale
 
 ### Struttura cartella di output
 ```
@@ -84,7 +84,6 @@ cartella_esportazione/
 
 ### Conservazione delle proprietà dei layer
 - **Stili e renderer**: mantenuti nel progetto esportato
-- **Etichette (labels)**: impostazioni di etichettatura copiate solo se effettivamente abilitate e configurate (validazione semplificata per compatibilità versioni QGIS)
 - **Visibilità**: rispettata la configurazione di visibilità dei layer
 - **Scala di visibilità**: conservate le impostazioni di scala minima/massima
 - **Opacità**: mantenuta per i layer raster
@@ -104,7 +103,7 @@ cartella_esportazione/
 ### Ottimizzazioni per database e performance
 - **Gestione timeout connessioni**: retry automatico per connessioni database scadute
 - **Query ottimizzate**: utilizzo di bounding box spaziali per ridurre il carico sui database
-- **Nessun limite**: esportazione di tutti gli elementi disponibili nei layer selezionati
+- **Limite features**: massimo 10.000 features per esportazione in modalità "tutti gli elementi"
 - **Controlli cancellazione**: possibilità di interrompere operazioni lunghe in qualsiasi momento
 - **Buffer spaziale**: piccolo buffer aggiunto alle bounding box per evitare perdita di features ai bordi
 
@@ -136,11 +135,6 @@ Se QGIS va in freeze durante esportazioni complesse con molti dati:
 - **Timeout connessione**: il sistema attende qualche secondo e riprova automaticamente
 - Se i problemi persistono, verifica le impostazioni di connessione al database in QGIS
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 53f3979 (Revert "versione 1.4")
 #### Come salvare le credenziali del database nel progetto QGIS:
 1. **Per ciascun layer PostGIS nel progetto**:
    - Fai clic destro sul layer → Proprietà
@@ -193,22 +187,7 @@ Se le relazioni tra tabelle non vengono visualizzate correttamente nel progetto 
 ### Esportazioni di grandi dimensioni
 Per esportazioni molto grandi, considera:
 - Usa la modalità "Elementi nei poligoni selezionati" per limitare l'esportazione a specifiche aree
-=======
-<<<<<<< HEAD
-=======
->>>>>>> parent of c3aef7c (versione 1.4)
-=======
->>>>>>> 53f3979 (Revert "versione 1.4")
-### Limite features raggiunto
-Quando viene visualizzato l'errore "Il layer contiene troppi elementi":
-- Usa la modalità "Elementi nei poligoni selezionati" per limitare l'esportazione
->>>>>>> parent of c3aef7c (versione 1.4)
 - Effettua esportazioni separate per porzioni più piccole dell'area di interesse
-- Usa il pulsante "Annulla" se l'esportazione sta impiegando troppo tempo
-
-## Cronologia delle modifiche
-
-Vedi [CHANGELOG.md](CHANGELOG.md) per la cronologia completa delle modifiche e delle nuove funzionalità.
 
 ## Supporto
 

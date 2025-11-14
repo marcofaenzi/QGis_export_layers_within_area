@@ -7,7 +7,7 @@ from qgis.PyQt.QtCore import QCoreApplication, QSettings
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox, QProgressBar, QPushButton
 
-from qgis.core import Qgis, QgsFeatureRequest, QgsMessageLog, QgsProject, QgsVectorLayer, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsLayerTree, QgsRasterLayer, QgsMapLayer, QgsMapSettings, QgsReferencedRectangle, QgsBrightnessContrastFilter, QgsApplication
+from qgis.core import Qgis, QgsFeatureRequest, QgsMessageLog, QgsProject, QgsVectorLayer, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsLayerTree, QgsRasterLayer, QgsMapLayer, QgsMapSettings, QgsReferencedRectangle, QgsBrightnessContrastFilter, QgsApplication, QgsRelation
 
 from .config_dialog import ConfigDialog
 from .exporter import ExportError, LayerExporter
@@ -300,24 +300,12 @@ class ExportLayersWithinAreaPlugin:
         # Chiamata iniziale a _rebuild_layer_tree
         self._rebuild_layer_tree(original_root, new_root, exported_layers_map)
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 53f3979 (Revert "versione 1.4")
         # Applica le configurazioni delle etichette ora che tutti i layer sono stati aggiunti
         self._apply_pending_labeling(pending_labeling)
 
         # Copia le relazioni dal progetto originale al nuovo progetto
         self._copy_project_relations(project, new_project, exported_layers_map)
 
-=======
->>>>>>> parent of c3aef7c (versione 1.4)
-<<<<<<< HEAD
-=======
->>>>>>> parent of c3aef7c (versione 1.4)
-=======
->>>>>>> 53f3979 (Revert "versione 1.4")
         if not new_project.write():
             QgsMessageLog.logMessage(
                 f"Impossibile salvare il progetto QGIS: {new_project.error().message()}",
@@ -549,11 +537,6 @@ class ExportLayersWithinAreaPlugin:
             self.tr("Esportazione cancellata"),
         )
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 53f3979 (Revert "versione 1.4")
     def _validate_labeling_in_new_layer(self, labeling, new_layer, original_layer):
         """Valida se le etichette copiate sono utilizzabili nel nuovo layer."""
         issues = []
@@ -802,11 +785,3 @@ class ExportLayersWithinAreaPlugin:
                         issues.append(f"• {layer.name()}: Errore di connessione al database ({str(e)[:50]}...)")
 
         return issues
-
-=======
->>>>>>> parent of c3aef7c (versione 1.4)
-<<<<<<< HEAD
-=======
->>>>>>> parent of c3aef7c (versione 1.4)
-=======
->>>>>>> 53f3979 (Revert "versione 1.4")

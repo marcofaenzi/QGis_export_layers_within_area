@@ -258,9 +258,13 @@ class LayerExporter:
         """Restituisce tutte le features di un layer senza applicare ritagli geometrici."""
         result: List[QgsFeature] = []
 
-        # Usa una richiesta senza limiti per esportare tutti gli elementi
-        # Il controllo di cancellazione permette di interrompere esportazioni lunghe se necessario
+        # Usa una richiesta con limiti per evitare di caricare tutto in memoria
+        # Questo è particolarmente importante per layer connessi a database
         request = QgsFeatureRequest()
+
+        # Limita il numero di features per evitare timeout (massimo 10000 features)
+        # L'utente può sempre fare esportazioni separate se necessario
+        request.setLimit(10000)
 
         # Ottimizzazioni per le performance
         request.setFlags(request.flags() & ~QgsFeatureRequest.NoGeometry)
@@ -286,6 +290,8 @@ class LayerExporter:
             error_msg = f"Errore nell'accesso al layer {layer.name()}: {str(e)}"
             if "password" in str(e).lower() or "connection" in str(e).lower():
                 error_msg += "\n\nPossibile timeout della connessione al database. Riprova con meno layer o considera di filtrare i dati."
+            elif "limit" in str(e).lower():
+                error_msg += "\n\nIl layer contiene troppi elementi. Usa la modalità 'Elementi nei poligoni selezionati' per limitare l'esportazione."
             raise ExportError(error_msg)
 
         return result
