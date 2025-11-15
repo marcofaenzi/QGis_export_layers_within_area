@@ -198,45 +198,54 @@ class ExportLayersWithinAreaPlugin:
             exported_data: Lista di tuple (percorso_file, layer_originale)
             output_directory: Directory dove salvare il progetto
         """
-        project = QgsProject.instance()
+        import tempfile
+        import os
+
+        original_project = QgsProject.instance()
 
         # Crea il nome del file di destinazione
-        current_project_name = project.baseName() or "exported_project"
+        current_project_name = original_project.baseName() or "exported_project"
         qgz_filename = f"{current_project_name}_exported.qgz"
         final_project_path = os.path.join(output_directory, qgz_filename)
 
-        # PASSO 1: Salva il progetto corrente nella posizione desiderata
-        project.setFileName(final_project_path)
+        # PASSO 1: Crea una copia completa del progetto corrente
+        # Salva temporaneamente il progetto originale
+        with tempfile.NamedTemporaryFile(suffix='.qgz', delete=False) as temp_file:
+            temp_path = temp_file.name
 
-        if not project.write():
+        if not original_project.write(temp_path):
             QgsMessageLog.logMessage(
-                f"Impossibile salvare il progetto QGIS: {project.error().message()}",
+                f"Impossibile salvare il progetto temporaneo: {original_project.error().message()}",
                 "ExportLayersWithinArea",
                 level=Qgis.Critical,
             )
             QMessageBox.critical(
                 self.iface.mainWindow(),
                 self.tr("Export Layers Within Area"),
-                self.tr("Errore nel salvataggio del progetto QGIS."),
+                self.tr("Errore nel salvataggio temporaneo del progetto."),
             )
             return
 
-        # PASSO 2: Carica il progetto appena salvato per modificarlo
+        # Carica il progetto in un nuovo oggetto (copia completa)
         new_project = QgsProject()
-        if not new_project.read(final_project_path):
+        if not new_project.read(temp_path):
             QgsMessageLog.logMessage(
-                "Impossibile ricaricare il progetto appena salvato",
+                "Impossibile caricare la copia del progetto",
                 "ExportLayersWithinArea",
                 level=Qgis.Critical,
             )
             QMessageBox.critical(
                 self.iface.mainWindow(),
                 self.tr("Export Layers Within Area"),
-                self.tr("Errore nel caricamento del progetto appena salvato."),
+                self.tr("Errore nel caricamento della copia del progetto."),
             )
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
             return
 
-        # PASSO 3: Identifica quali layer sono stati esportati
+        # PASSO 2.5: Identifica quali layer sono stati esportati
         exported_layer_ids = {original_layer.id() for _, original_layer in exported_data}
 
         # PASSO 4: Rimuovi tutti i layer che non sono stati esportati
@@ -245,10 +254,16 @@ class ExportLayersWithinAreaPlugin:
             if layer_id not in exported_layer_ids:
                 layers_to_remove.append(layer_id)
 
+        layer_names_removed = []
         for layer_id in layers_to_remove:
+            layer = new_project.mapLayer(layer_id)
+            if layer:
+                layer_names_removed.append(layer.name())
             new_project.removeMapLayer(layer_id)
+
+        if layer_names_removed:
             QgsMessageLog.logMessage(
-                f"Layer rimosso dal progetto esportato: {new_project.mapLayer(layer_id).name() if new_project.mapLayer(layer_id) else layer_id}",
+                f"Layer rimossi dal progetto esportato: {', '.join(layer_names_removed)}",
                 "ExportLayersWithinArea",
                 level=Qgis.Info,
             )
@@ -257,9 +272,17 @@ class ExportLayersWithinAreaPlugin:
         self._remove_empty_groups(new_project.layerTreeRoot())
 
         # PASSO 6: Salva il progetto modificato
+        new_project.setFileName(final_project_path)
+        QgsMessageLog.logMessage(
+            f"Salvataggio progetto modificato in: {final_project_path}",
+            "ExportLayersWithinArea",
+            level=Qgis.Info,
+        )
+
         if not new_project.write():
+            error_msg = new_project.error().message() or "Errore sconosciuto"
             QgsMessageLog.logMessage(
-                f"Impossibile salvare il progetto QGIS modificato: {new_project.error().message()}",
+                f"Impossibile salvare il progetto QGIS modificato: {error_msg}",
                 "ExportLayersWithinArea",
                 level=Qgis.Critical,
             )
@@ -270,6 +293,21 @@ class ExportLayersWithinAreaPlugin:
             )
             return
 
+        # Verifica che il file sia stato creato
+        if os.path.exists(final_project_path):
+            file_size = os.path.getsize(final_project_path)
+            QgsMessageLog.logMessage(
+                f"Progetto salvato correttamente: {final_project_path} (dimensione: {file_size} bytes)",
+                "ExportLayersWithinArea",
+                level=Qgis.Info,
+            )
+        else:
+            QgsMessageLog.logMessage(
+                f"ATTENZIONE: File progetto non trovato dopo il salvataggio: {final_project_path}",
+                "ExportLayersWithinArea",
+                level=Qgis.Warning,
+            )
+
         # Log di completamento
         num_layers = len(new_project.mapLayers())
         num_relations = len(new_project.relationManager().relations())
@@ -279,29 +317,17 @@ class ExportLayersWithinAreaPlugin:
             level=Qgis.Info,
         )
 
-        # Mostra messaggio di successo
+        # Rimuovi il file temporaneo
+        try:
+            os.unlink(temp_path)
+        except:
+            pass
+
+        # Mostra messaggio di successo con percorso del progetto creato
         self.iface.messageBar().pushSuccess(
             self.tr("Export Layers Within Area"),
-            self.tr("Progetto QGIS creato: {project_path}").format(project_path=qgz_filename),
+            self.tr("Progetto QGIS creato: {project_path}").format(project_path=final_project_path),
         )
-
-        # Chiede all'utente se vuole aprire il nuovo progetto
-        reply = QMessageBox.question(
-            self.iface.mainWindow(),
-            self.tr("Apri nuovo progetto?"),
-            self.tr("Vuoi aprire il progetto appena creato ({project_name})?\n\nAttenzione: il progetto corrente verrà chiuso.").format(project_name=qgz_filename),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-
-        if reply == QMessageBox.StandardButton.Yes:
-            # Ricarica il progetto dalla nuova posizione
-            success = QgsProject.instance().read(final_project_path)
-            if not success:
-                QMessageBox.warning(
-                    self.iface.mainWindow(),
-                    self.tr("Errore apertura progetto"),
-                    self.tr("Impossibile aprire il progetto esportato."),
-                )
 
     def _remove_empty_groups(self, root_group: QgsLayerTreeGroup) -> None:
         """Rimuove ricorsivamente i gruppi vuoti dall'albero dei layer.

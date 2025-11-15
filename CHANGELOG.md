@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Export method**: Completely redesigned the project creation logic to use project copying instead of building from scratch
 - **Layer management**: Exported layers now maintain their position in the layer tree and all associated properties
+- **Project opening**: Exported projects are no longer opened automatically; only success message with file path is shown
 
 ### Removed
 - **Manual project reconstruction**: Removed the complex logic for rebuilding layer trees, groups, and relations from scratch
