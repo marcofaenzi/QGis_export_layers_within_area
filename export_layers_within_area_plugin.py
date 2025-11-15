@@ -185,13 +185,17 @@ class ExportLayersWithinAreaPlugin:
         self.export_worker.start()
 
     def _create_qgis_project_v2(self, exported_data: List[Tuple[str, QgsMapLayer]], output_directory: str) -> None:
-        """Crea una copia esatta del progetto QGIS corrente senza modifiche.
+        """Crea una copia del progetto QGIS corrente e la modifica per contenere solo i layer esportati.
 
-        APPROCCIO ULTRA-SEMPLICE v2.0.0:
-        Salva semplicemente il progetto corrente in una nuova posizione.
+        APPROCCIO v2.0.0:
+        1. Salva il progetto corrente in una nuova posizione
+        2. Carica il progetto appena salvato
+        3. Rimuove tutti i layer non esportati
+        4. Rimuove i gruppi vuoti
+        5. Salva il progetto modificato
 
         Args:
-            exported_data: Lista di tuple (percorso_file, layer_originale) - ignorata
+            exported_data: Lista di tuple (percorso_file, layer_originale)
             output_directory: Directory dove salvare il progetto
         """
         project = QgsProject.instance()
@@ -201,7 +205,7 @@ class ExportLayersWithinAreaPlugin:
         qgz_filename = f"{current_project_name}_exported.qgz"
         final_project_path = os.path.join(output_directory, qgz_filename)
 
-        # Salva direttamente il progetto corrente nella posizione desiderata
+        # PASSO 1: Salva il progetto corrente nella posizione desiderata
         project.setFileName(final_project_path)
 
         if not project.write():
@@ -217,11 +221,60 @@ class ExportLayersWithinAreaPlugin:
             )
             return
 
+        # PASSO 2: Carica il progetto appena salvato per modificarlo
+        new_project = QgsProject()
+        if not new_project.read(final_project_path):
+            QgsMessageLog.logMessage(
+                "Impossibile ricaricare il progetto appena salvato",
+                "ExportLayersWithinArea",
+                level=Qgis.Critical,
+            )
+            QMessageBox.critical(
+                self.iface.mainWindow(),
+                self.tr("Export Layers Within Area"),
+                self.tr("Errore nel caricamento del progetto appena salvato."),
+            )
+            return
+
+        # PASSO 3: Identifica quali layer sono stati esportati
+        exported_layer_ids = {original_layer.id() for _, original_layer in exported_data}
+
+        # PASSO 4: Rimuovi tutti i layer che non sono stati esportati
+        layers_to_remove = []
+        for layer_id, layer in new_project.mapLayers().items():
+            if layer_id not in exported_layer_ids:
+                layers_to_remove.append(layer_id)
+
+        for layer_id in layers_to_remove:
+            new_project.removeMapLayer(layer_id)
+            QgsMessageLog.logMessage(
+                f"Layer rimosso dal progetto esportato: {new_project.mapLayer(layer_id).name() if new_project.mapLayer(layer_id) else layer_id}",
+                "ExportLayersWithinArea",
+                level=Qgis.Info,
+            )
+
+        # PASSO 5: Rimuovi i gruppi vuoti dall'albero dei layer
+        self._remove_empty_groups(new_project.layerTreeRoot())
+
+        # PASSO 6: Salva il progetto modificato
+        if not new_project.write():
+            QgsMessageLog.logMessage(
+                f"Impossibile salvare il progetto QGIS modificato: {new_project.error().message()}",
+                "ExportLayersWithinArea",
+                level=Qgis.Critical,
+            )
+            QMessageBox.critical(
+                self.iface.mainWindow(),
+                self.tr("Export Layers Within Area"),
+                self.tr("Errore nel salvataggio del progetto QGIS modificato."),
+            )
+            return
+
         # Log di completamento
-        num_layers = len(project.mapLayers())
-        num_relations = len(project.relationManager().relations())
+        num_layers = len(new_project.mapLayers())
+        num_relations = len(new_project.relationManager().relations())
         QgsMessageLog.logMessage(
-            f"Progetto v2.0.0 completato - Layer: {num_layers}, Relazioni: {num_relations}, File: {qgz_filename}",
+            f"Progetto v2.0.0 completato - Layer esportati: {len(exported_layer_ids)}, Layer totali: {num_layers}, Relazioni: {num_relations}, File: {qgz_filename}",
             "ExportLayersWithinArea",
             level=Qgis.Info,
         )
@@ -248,6 +301,58 @@ class ExportLayersWithinAreaPlugin:
                     self.iface.mainWindow(),
                     self.tr("Errore apertura progetto"),
                     self.tr("Impossibile aprire il progetto esportato."),
+                )
+
+    def _remove_empty_groups(self, root_group: QgsLayerTreeGroup) -> None:
+        """Rimuove ricorsivamente i gruppi vuoti dall'albero dei layer.
+
+        Args:
+            root_group: Il gruppo radice da cui iniziare la pulizia
+        """
+        # Lista per tenere traccia dei gruppi da rimuovere
+        groups_to_remove = []
+
+        def collect_empty_groups(group):
+            """Raccoglie ricorsivamente i gruppi vuoti."""
+            for child in group.children():
+                if child.nodeType() == QgsLayerTree.NodeGroup:
+                    # Ricorsione sui sottogruppi
+                    collect_empty_groups(child)
+
+                    # Controlla se questo gruppo è vuoto
+                    if not child.children():
+                        groups_to_remove.append(child)
+                        QgsMessageLog.logMessage(
+                            f"Gruppo vuoto trovato e contrassegnato per rimozione: {child.name()}",
+                            "ExportLayersWithinArea",
+                            level=Qgis.Info,
+                        )
+
+        # Raccogli tutti i gruppi vuoti
+        collect_empty_groups(root_group)
+
+        # Rimuovi i gruppi vuoti (dal più profondo al più superficiale)
+        # Invertiamo l'ordine per rimuovere prima i gruppi più profondi
+        groups_to_remove.reverse()
+
+        for empty_group in groups_to_remove:
+            group_name = empty_group.name()  # Salva il nome prima della rimozione
+            try:
+                # Trova il gruppo padre
+                parent = empty_group.parent()
+                if parent:
+                    # Rimuovi il gruppo dal padre
+                    parent.removeChildNode(empty_group)
+                    QgsMessageLog.logMessage(
+                        f"Gruppo vuoto rimosso: {group_name}",
+                        "ExportLayersWithinArea",
+                        level=Qgis.Info,
+                    )
+            except Exception as e:
+                QgsMessageLog.logMessage(
+                    f"Errore nella rimozione del gruppo vuoto {group_name}: {str(e)}",
+                    "ExportLayersWithinArea",
+                    level=Qgis.Warning,
                 )
 
     def _fetch_feature_by_id(self, layer: QgsVectorLayer, feature_id: int):
