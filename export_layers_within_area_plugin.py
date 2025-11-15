@@ -61,17 +61,20 @@ class ExportLayersWithinAreaPlugin:
     def open_configuration(self) -> None:
         current_layer_id = self._configured_polygon_layer_id()
         current_output_dir = self._output_directory()
-        dialog = ConfigDialog(self.iface.mainWindow(), current_layer_id, current_output_dir)
+        current_logging_enabled = self._logging_enabled()
+        dialog = ConfigDialog(self.iface.mainWindow(), current_layer_id, current_output_dir, current_logging_enabled)
         if dialog.exec_() == dialog.Accepted:
             layer_id = dialog.selected_layer_id()
             output_dir = dialog.output_directory()
+            logging_enabled = dialog.logging_enabled()
             if layer_id:
                 settings = self._settings()
                 settings.setValue("polygon_layer_id", layer_id)
                 settings.setValue("output_directory", output_dir)
+                settings.setValue("logging_enabled", logging_enabled)
                 settings.sync()
                 QMessageBox.information(
-                    self.iface.mainWindow(), self.tr("Configurazione"), self.tr("Layer e directory salvati correttamente."),
+                    self.iface.mainWindow(), self.tr("Configurazione"), self.tr("Impostazioni salvate correttamente."),
                 )
 
     def run(self) -> None:
@@ -94,7 +97,7 @@ class ExportLayersWithinAreaPlugin:
             return
         
         previously_selected_layer_ids = self._selected_layers_ids_for_export()
-        dialog = MainDialog(self.iface.mainWindow(), polygon_layer, previously_selected_layer_ids)
+        dialog = MainDialog(self.iface.mainWindow(), polygon_layer, previously_selected_layer_ids, self._logging_enabled())
         if dialog.exec_() != dialog.Accepted:
             return
 
@@ -214,10 +217,9 @@ class ExportLayersWithinAreaPlugin:
             temp_path = temp_file.name
 
         if not original_project.write(temp_path):
-            QgsMessageLog.logMessage(
+            self._log_message(
                 f"Impossibile salvare il progetto temporaneo: {original_project.error().message()}",
-                "ExportLayersWithinArea",
-                level=Qgis.Critical,
+                Qgis.Critical,
             )
             QMessageBox.critical(
                 self.iface.mainWindow(),
@@ -229,10 +231,9 @@ class ExportLayersWithinAreaPlugin:
         # Carica il progetto in un nuovo oggetto (copia completa)
         new_project = QgsProject()
         if not new_project.read(temp_path):
-            QgsMessageLog.logMessage(
+            self._log_message(
                 "Impossibile caricare la copia del progetto",
-                "ExportLayersWithinArea",
-                level=Qgis.Critical,
+                Qgis.Critical,
             )
             QMessageBox.critical(
                 self.iface.mainWindow(),
@@ -262,10 +263,9 @@ class ExportLayersWithinAreaPlugin:
             new_project.removeMapLayer(layer_id)
 
         if layer_names_removed:
-            QgsMessageLog.logMessage(
+            self._log_message(
                 f"Layer rimossi dal progetto esportato: {', '.join(layer_names_removed)}",
-                "ExportLayersWithinArea",
-                level=Qgis.Info,
+                Qgis.Info,
             )
 
         # PASSO 5: Aggiorna i datasource dei layer esportati per puntare ai GeoPackage
@@ -276,18 +276,16 @@ class ExportLayersWithinAreaPlugin:
 
         # PASSO 7: Salva il progetto modificato
         new_project.setFileName(final_project_path)
-        QgsMessageLog.logMessage(
+        self._log_message(
             f"Salvataggio progetto modificato in: {final_project_path}",
-            "ExportLayersWithinArea",
-            level=Qgis.Info,
+            Qgis.Info,
         )
 
         if not new_project.write():
             error_msg = new_project.error().message() or "Errore sconosciuto"
-            QgsMessageLog.logMessage(
+            self._log_message(
                 f"Impossibile salvare il progetto QGIS modificato: {error_msg}",
-                "ExportLayersWithinArea",
-                level=Qgis.Critical,
+                Qgis.Critical,
             )
             QMessageBox.critical(
                 self.iface.mainWindow(),
@@ -299,25 +297,22 @@ class ExportLayersWithinAreaPlugin:
         # Verifica che il file sia stato creato
         if os.path.exists(final_project_path):
             file_size = os.path.getsize(final_project_path)
-            QgsMessageLog.logMessage(
+            self._log_message(
                 f"Progetto salvato correttamente: {final_project_path} (dimensione: {file_size} bytes)",
-                "ExportLayersWithinArea",
-                level=Qgis.Info,
+                Qgis.Info,
             )
         else:
-            QgsMessageLog.logMessage(
+            self._log_message(
                 f"ATTENZIONE: File progetto non trovato dopo il salvataggio: {final_project_path}",
-                "ExportLayersWithinArea",
-                level=Qgis.Warning,
+                Qgis.Warning,
             )
 
         # Log di completamento
         num_layers = len(new_project.mapLayers())
         num_relations = len(new_project.relationManager().relations())
-        QgsMessageLog.logMessage(
+        self._log_message(
             f"Progetto v2.0.0 completato - Layer esportati: {len(exported_layer_ids)}, Layer totali: {num_layers}, Relazioni: {num_relations}, File: {qgz_filename}",
-            "ExportLayersWithinArea",
-            level=Qgis.Info,
+            Qgis.Info,
         )
 
         # Rimuovi il file temporaneo
@@ -356,27 +351,24 @@ class ExportLayersWithinAreaPlugin:
 
                     if layer.isValid():
                         updated_layers.append(layer.name())
-                        QgsMessageLog.logMessage(
+                        self._log_message(
                             f"Datasource aggiornato nel progetto esportato per layer '{layer.name()}': {os.path.basename(new_path)}",
-                            "ExportLayersWithinArea",
-                            level=Qgis.Info,
+                            Qgis.Info,
                         )
                     else:
                         # Se l'aggiornamento fallisce, mostra un warning
-                        QgsMessageLog.logMessage(
+                        self._log_message(
                             f"Impossibile aggiornare datasource per layer '{layer.name()}' nel progetto esportato",
-                            "ExportLayersWithinArea",
-                            level=Qgis.Warning,
+                            Qgis.Warning,
                         )
                         # Ripristina il datasource (anche se potrebbe non funzionare)
                         layer.setDataSource(old_datasource, layer.name(), layer.providerType())
 
         if updated_layers:
             layer_list = ", ".join(updated_layers)
-            QgsMessageLog.logMessage(
+            self._log_message(
                 f"Progetto esportato aggiornato: {len(updated_layers)} layer ora puntano ai GeoPackage ({layer_list})",
-                "ExportLayersWithinArea",
-                level=Qgis.Info,
+                Qgis.Info,
             )
 
     def _remove_empty_groups(self, root_group: QgsLayerTreeGroup) -> None:
@@ -398,10 +390,9 @@ class ExportLayersWithinAreaPlugin:
                     # Controlla se questo gruppo è vuoto
                     if not child.children():
                         groups_to_remove.append(child)
-                        QgsMessageLog.logMessage(
+                        self._log_message(
                             f"Gruppo vuoto trovato e contrassegnato per rimozione: {child.name()}",
-                            "ExportLayersWithinArea",
-                            level=Qgis.Info,
+                            Qgis.Info,
                         )
 
         # Raccogli tutti i gruppi vuoti
@@ -419,16 +410,14 @@ class ExportLayersWithinAreaPlugin:
                 if parent:
                     # Rimuovi il gruppo dal padre
                     parent.removeChildNode(empty_group)
-                    QgsMessageLog.logMessage(
+                    self._log_message(
                         f"Gruppo vuoto rimosso: {group_name}",
-                        "ExportLayersWithinArea",
-                        level=Qgis.Info,
+                        Qgis.Info,
                     )
             except Exception as e:
-                QgsMessageLog.logMessage(
+                self._log_message(
                     f"Errore nella rimozione del gruppo vuoto {group_name}: {str(e)}",
-                    "ExportLayersWithinArea",
-                    level=Qgis.Warning,
+                    Qgis.Warning,
                 )
 
     def _fetch_feature_by_id(self, layer: QgsVectorLayer, feature_id: int):
@@ -453,6 +442,15 @@ class ExportLayersWithinAreaPlugin:
     def _output_directory(self) -> str:
         settings = self._settings()
         return settings.value("output_directory", os.path.join(os.path.dirname(__file__), "exported_layers"))
+
+    def _logging_enabled(self) -> bool:
+        settings = self._settings()
+        return settings.value("logging_enabled", True, type=bool)
+
+    def _log_message(self, message: str, level: Qgis.MessageLevel = Qgis.Info) -> None:
+        """Logga un messaggio solo se il logging è abilitato."""
+        if self._logging_enabled():
+            QgsMessageLog.logMessage(message, "ExportLayersWithinArea", level)
 
     def _selected_layers_ids_for_export(self) -> List[str]:
         settings = self._settings()

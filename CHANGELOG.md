@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Group cleanup**: Automatically removes empty groups from the layer tree after layer removal
 - **Empty table export**: Tables without geometry are now exported even when empty, preserving their structure for future use
 - **Exported project datasource update**: The exported project layers are automatically updated to point to the exported GeoPackage files
+- **Configurable logging**: Added option to enable/disable detailed logging messages during export operations, layer selection, and data export
 
 ### Changed
 - **Export method**: Completely redesigned the project creation logic to use project copying instead of building from scratch

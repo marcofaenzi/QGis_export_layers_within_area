@@ -18,10 +18,23 @@ from qgis.core import (
     Qgis,
     QgsMessageLog,
 )
+from qgis.PyQt.QtCore import QSettings
 
 
 class ExportError(RuntimeError):
     """Errore generico durante l'esportazione."""
+
+
+def _is_logging_enabled() -> bool:
+    """Controlla se il logging è abilitato nelle impostazioni del plugin."""
+    settings = QSettings("ExportLayersWithinArea", "Plugin")
+    return settings.value("logging_enabled", True, type=bool)
+
+
+def _log_message(message: str, level: Qgis.MessageLevel = Qgis.Info) -> None:
+    """Logga un messaggio solo se il logging è abilitato."""
+    if _is_logging_enabled():
+        QgsMessageLog.logMessage(message, "ExportLayersWithinArea", level)
 
 
 def _execute_with_retry(operation: Callable, max_retries: int = 3, delay: float = 1.0) -> any:
@@ -50,10 +63,9 @@ def _execute_with_retry(operation: Callable, max_retries: int = 3, delay: float 
             # Controlla se è un errore di connessione che merita un retry
             if any(keyword in error_str for keyword in ['password', 'connection', 'timeout', 'fe_sendauth']):
                 if attempt < max_retries - 1:
-                    QgsMessageLog.logMessage(
+                    _log_message(
                         f"Tentativo {attempt + 1} fallito, riprovo tra {delay} secondi: {str(e)}",
-                        "ExportLayersWithinArea",
-                        level=Qgis.Warning,
+                        Qgis.Warning,
                     )
                     time.sleep(delay)
                     continue
@@ -139,10 +151,9 @@ class LayerExporter:
                 # Gestisce sia NoGeometry che NullGeometry
                 geom_type = layer.geometryType()
                 if geom_type == QgsWkbTypes.NoGeometry or geom_type == QgsWkbTypes.NullGeometry:
-                    QgsMessageLog.logMessage(
+                    _log_message(
                         f"Esportazione layer senza geometria (tabella): {layer.name()}",
-                        "ExportLayersWithinArea",
-                        level=Qgis.Info,
+                        Qgis.Info,
                     )
                     features = self._all_features(layer)
                     # I layer senza geometria vengono sempre esportati, anche se vuoti
@@ -174,10 +185,9 @@ class LayerExporter:
                 exported_data.append((layer.source(), layer))
             
             else:
-                QgsMessageLog.logMessage(
+                _log_message(
                     f"Tipo di layer non supportato per l'esportazione: {layer.name()} ({layer.type()})",
-                    "ExportLayersWithinArea",
-                    level=Qgis.Warning,
+                    Qgis.Warning,
                 )
                 continue
 

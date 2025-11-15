@@ -4,6 +4,7 @@ import os
 from typing import List, Optional, Tuple
 
 from qgis.PyQt.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -21,7 +22,7 @@ from qgis.core import QgsMapLayer, QgsProject, QgsWkbTypes
 class ConfigDialog(QDialog):
     """Dialog per selezionare il layer poligonale di riferimento."""
 
-    def __init__(self, parent=None, current_layer_id: Optional[str] = None, current_output_dir: Optional[str] = None) -> None:
+    def __init__(self, parent=None, current_layer_id: Optional[str] = None, current_output_dir: Optional[str] = None, logging_enabled: bool = True) -> None:
         super().__init__(parent)
         self.setWindowTitle("Configurazione Export Layers Within Area")
 
@@ -43,6 +44,11 @@ class ConfigDialog(QDialog):
         output_dir_layout.addWidget(self._output_dir_edit)
         output_dir_layout.addWidget(browse_button)
 
+        # Checkbox per abilitare/disabilitare i log
+        self._logging_checkbox = QCheckBox("Abilita logging dettagliato", self)
+        self._logging_checkbox.setChecked(logging_enabled)
+        self._logging_checkbox.setToolTip("Abilita/disabilita i messaggi di log dettagliati durante l'esportazione")
+
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
             self,
@@ -55,6 +61,7 @@ class ConfigDialog(QDialog):
         layout.addWidget(self._combo)
         layout.addWidget(QLabel("Cartella di esportazione:"))
         layout.addLayout(output_dir_layout)
+        layout.addWidget(self._logging_checkbox)
         layout.addWidget(buttons)
 
     def _build_layer_list(self, current_layer_id: Optional[str]) -> None:
@@ -86,6 +93,9 @@ class ConfigDialog(QDialog):
     def output_directory(self) -> str:
         directory = self._output_dir_edit.text().strip()
         return directory if directory else ""
+
+    def logging_enabled(self) -> bool:
+        return self._logging_checkbox.isChecked()
 
     def _choose_output_dir(self) -> None:
         directory = QFileDialog.getExistingDirectory(

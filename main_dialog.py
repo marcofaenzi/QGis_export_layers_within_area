@@ -20,19 +20,20 @@ from qgis.PyQt.QtWidgets import (
 )
 
 from qgis.core import QgsMapLayer, QgsProject, QgsVectorLayer, QgsWkbTypes, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsLayerTree
-from qgis.core import QgsMessageLog, Qgis
+from qgis.core import Qgis
 
 
 class MainDialog(QDialog):
     """Dialog che permette di selezionare i layer da esportare e il poligono."""
 
-    def __init__(self, parent: QWidget, polygon_layer: QgsVectorLayer, previously_selected_layer_ids: Optional[List[str]] = None) -> None:
+    def __init__(self, parent: QWidget, polygon_layer: QgsVectorLayer, previously_selected_layer_ids: Optional[List[str]] = None, logging_enabled: bool = True) -> None:
         super().__init__(parent)
         self._polygon_layer = polygon_layer
         self._selected_feature_ids = [feature.id() for feature in polygon_layer.selectedFeatures()]
         self._layers_to_export: List[str] = []
         self._previously_selected_layer_ids = previously_selected_layer_ids or []
         self._export_mode = "all_features"  # "within_area" o "all_features"
+        self._logging_enabled = logging_enabled
 
         self.setWindowTitle("Export Layers Within Area")
         self.resize(540, 480)
@@ -139,24 +140,23 @@ class MainDialog(QDialog):
                             geom_type_str = f"GeomType:{geom_type}"
                     else:
                         geom_type_str = "N/A"
-                    QgsMessageLog.logMessage(
+                    self._log_message(
                         f"[DEBUG] Layer trovato: {layer.name()} | Tipo: {layer.type()} | {geom_type_str}",
-                        "ExportLayersWithinArea",
                         Qgis.Info
                     )
                 
                 # Modificato per includere layer Raster (come XYZ Tiles) e layer senza geometria (tabelle)
                 if layer is None or (layer.type() != QgsMapLayer.VectorLayer and layer.type() != QgsMapLayer.RasterLayer):
                     if layer is not None:
-                        QgsMessageLog.logMessage(f"[DEBUG] Layer escluso (tipo non supportato): {layer.name()}", "ExportLayersWithinArea", Qgis.Info)
+                        self._log_message(f"[DEBUG] Layer escluso (tipo non supportato): {layer.name()}", Qgis.Info)
                     continue
                 
                 if layer == self._polygon_layer: # Escludi il layer poligonale di riferimento
-                    QgsMessageLog.logMessage(f"[DEBUG] Layer escluso (poligono di riferimento): {layer.name()}", "ExportLayersWithinArea", Qgis.Info)
+                    self._log_message(f"[DEBUG] Layer escluso (poligono di riferimento): {layer.name()}", Qgis.Info)
                     continue
 
                 # Log per layer che vengono aggiunti alla lista
-                QgsMessageLog.logMessage(f"[DEBUG] Layer aggiunto alla lista: {layer.name()} (ID: {layer.id()})", "ExportLayersWithinArea", Qgis.Info)
+                self._log_message(f"[DEBUG] Layer aggiunto alla lista: {layer.name()} (ID: {layer.id()})", Qgis.Info)
 
                 item = QTreeWidgetItem(parent_item)
                 item.setText(0, layer.name())
@@ -165,7 +165,7 @@ class MainDialog(QDialog):
 
                 if layer.id() in previously_selected_layer_ids:
                     item.setCheckState(0, Qt.CheckState.Checked)
-                    QgsMessageLog.logMessage(f"[DEBUG] _add_children_to_tree: Layer pre-selezionato: {layer.name()}", "ExportLayersWithinArea", Qgis.Info)
+                    self._log_message(f"[DEBUG] _add_children_to_tree: Layer pre-selezionato: {layer.name()}", Qgis.Info)
                 else:
                     item.setCheckState(0, Qt.CheckState.Unchecked)
 
@@ -251,4 +251,10 @@ class MainDialog(QDialog):
     def export_mode(self) -> str:
         """Restituisce la modalità di esportazione selezionata."""
         return self._export_mode
+
+    def _log_message(self, message: str, level: Qgis.MessageLevel = Qgis.Info) -> None:
+        """Logga un messaggio solo se il logging è abilitato."""
+        if self._logging_enabled:
+            from qgis.core import QgsMessageLog
+            QgsMessageLog.logMessage(message, "ExportLayersWithinArea", level)
 
