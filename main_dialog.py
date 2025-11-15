@@ -26,13 +26,13 @@ from qgis.core import Qgis
 class MainDialog(QDialog):
     """Dialog che permette di selezionare i layer da esportare e il poligono."""
 
-    def __init__(self, parent: QWidget, polygon_layer: QgsVectorLayer, previously_selected_layer_ids: Optional[List[str]] = None, logging_enabled: bool = True) -> None:
+    def __init__(self, parent: QWidget, polygon_layer: QgsVectorLayer, previously_selected_layer_ids: Optional[List[str]] = None, logging_enabled: bool = True, last_export_mode: str = "all_features") -> None:
         super().__init__(parent)
         self._polygon_layer = polygon_layer
         self._selected_feature_ids = [feature.id() for feature in polygon_layer.selectedFeatures()]
         self._layers_to_export: List[str] = []
         self._previously_selected_layer_ids = previously_selected_layer_ids or []
-        self._export_mode = "all_features"  # "within_area" o "all_features"
+        self._export_mode = last_export_mode  # Usa la modalità precedente invece di default
         self._logging_enabled = logging_enabled
 
         self.setWindowTitle("Export Layers Within Area")
@@ -66,11 +66,16 @@ class MainDialog(QDialog):
         export_mode_layout = QVBoxLayout(export_mode_box)
 
         self._export_all_radio = QRadioButton("Esporta tutti gli elementi", self)
-        self._export_all_radio.setChecked(True)
         self._export_all_radio.toggled.connect(self._on_export_mode_changed)
 
         self._export_within_area_radio = QRadioButton("Esporta solo elementi nei poligoni selezionati", self)
         self._export_within_area_radio.toggled.connect(self._on_export_mode_changed)
+
+        # Imposta il radiobutton corretto basato sulla modalità precedente
+        if self._export_mode == "all_features":
+            self._export_all_radio.setChecked(True)
+        else:
+            self._export_within_area_radio.setChecked(True)
 
         export_mode_layout.addWidget(self._export_all_radio)
         export_mode_layout.addWidget(self._export_within_area_radio)

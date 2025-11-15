@@ -97,12 +97,14 @@ class ExportLayersWithinAreaPlugin:
             return
         
         previously_selected_layer_ids = self._selected_layers_ids_for_export()
-        dialog = MainDialog(self.iface.mainWindow(), polygon_layer, previously_selected_layer_ids, self._logging_enabled())
+        dialog = MainDialog(self.iface.mainWindow(), polygon_layer, previously_selected_layer_ids, self._logging_enabled(), self._last_export_mode())
         if dialog.exec_() != dialog.Accepted:
             return
 
         # Ottieni la modalità di esportazione
         export_mode = dialog.export_mode()
+        # Salva la modalità selezionata per il prossimo utilizzo
+        self._save_export_mode(export_mode)
 
         features = []
         if export_mode == "within_area":
@@ -446,6 +448,15 @@ class ExportLayersWithinAreaPlugin:
     def _logging_enabled(self) -> bool:
         settings = self._settings()
         return settings.value("logging_enabled", True, type=bool)
+
+    def _last_export_mode(self) -> str:
+        settings = self._settings()
+        return settings.value("last_export_mode", "all_features", type=str)
+
+    def _save_export_mode(self, mode: str) -> None:
+        settings = self._settings()
+        settings.setValue("last_export_mode", mode)
+        settings.sync()
 
     def _log_message(self, message: str, level: Qgis.MessageLevel = Qgis.Info) -> None:
         """Logga un messaggio solo se il logging è abilitato."""
