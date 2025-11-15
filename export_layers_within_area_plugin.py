@@ -184,163 +184,50 @@ class ExportLayersWithinAreaPlugin:
         # Avvia l'esportazione in background
         self.export_worker.start()
 
-    def _create_qgis_project(self, exported_data: List[Tuple[str, QgsMapLayer]], output_directory: str) -> None:
-        project = QgsProject.instance()
-        
-        new_project = QgsProject()
+    def _create_qgis_project_v2(self, exported_data: List[Tuple[str, QgsMapLayer]], output_directory: str) -> None:
+        """Crea una copia esatta del progetto QGIS corrente senza modifiche.
 
-        # Usa il nome del progetto corrente per il file esportato
+        APPROCCIO ULTRA-SEMPLICE v2.0.0:
+        Salva semplicemente il progetto corrente in una nuova posizione.
+
+        Args:
+            exported_data: Lista di tuple (percorso_file, layer_originale) - ignorata
+            output_directory: Directory dove salvare il progetto
+        """
+        project = QgsProject.instance()
+
+        # Crea il nome del file di destinazione
         current_project_name = project.baseName() or "exported_project"
         qgz_filename = f"{current_project_name}_exported.qgz"
-        new_project.setFileName(os.path.join(output_directory, qgz_filename))
+        final_project_path = os.path.join(output_directory, qgz_filename)
 
-        # Imposta il CRS del nuovo progetto uguale a quello del progetto originale
-        new_project.setCrs(project.crs())
+        # Salva direttamente il progetto corrente nella posizione desiderata
+        project.setFileName(final_project_path)
 
-        # Recupera l'estensione dal mapCanvas corrente
-        original_extent = self.iface.mapCanvas().extent()
-
-        # Imposta l'estensione della vista del nuovo progetto
-        # Utilizza setDefaultViewExtent() per impostare l'estensione predefinita della vista quando il progetto viene aperto.
-        new_project.viewSettings().setDefaultViewExtent(QgsReferencedRectangle(original_extent, new_project.crs()))
-
-        # La semplice impostazione dell'extent su viewSettings() sarà presa in considerazione al salvataggio del progetto.
-        # Non è necessario impostare il visibile extent sul mapCanvas qui, in quanto è il progetto che deve
-        # memorizzare la sua estensione iniziale.
-
-        # Aggiungi un gruppo "Exported Layers" al nuovo progetto
-        exported_layers_group = new_project.layerTreeRoot().addGroup(self.tr("Exported Layers"))
-
-        # Mappa gli ID dei layer originali ai nuovi layer esportati (o ai layer raster originali)
-        exported_layers_map = {}
-        # Memorizziamo le configurazioni delle etichette da applicare dopo che tutti i layer sono stati aggiunti
-        pending_labeling = []
-
-        for path, original_layer in exported_data:
-            new_qgis_layer = None
-            if original_layer.type() == QgsMapLayer.VectorLayer:
-                # Layer vettoriale: creato da GeoPackage esportato
-                new_qgis_layer = QgsVectorLayer(path, original_layer.name(), "ogr")
-                if new_qgis_layer.isValid():
-                    if original_layer.renderer() is not None:
-                        new_qgis_layer.setRenderer(original_layer.renderer().clone())
-
-                    # Memorizza le configurazioni delle etichette per applicarle dopo
-                    # che tutti i layer sono stati aggiunti al progetto
-                    if original_layer.labeling() is not None:
-                        try:
-                            labeling_obj = original_layer.labeling()
-                            labeling_type = type(labeling_obj).__name__
-
-                            # Controlla se le etichette sono abilitate e hanno contenuto significativo
-                            should_copy = False
-                            reason = ""
-
-                            if hasattr(labeling_obj, 'isEnabled') and labeling_obj.isEnabled():
-                                # Per etichette semplici abilitate
-                                should_copy = True
-                                reason = "etichette semplici abilitate"
-                            elif labeling_type == 'QgsRuleBasedLabeling':
-                                # Per etichette basate su regole, controlla se ci sono regole abilitate
-                                try:
-                                    rules = labeling_obj.rootRule().children()
-                                    active_rules = [rule for rule in rules if rule.active()]
-                                    if active_rules:
-                                        should_copy = True
-                                        reason = f"etichette basate su regole con {len(active_rules)} regola(e) attiva(e)"
-                                except:
-                                    pass
-                            elif hasattr(labeling_obj, 'settings'):
-                                # Per altri tipi di etichettatura, controlla se hanno impostazioni
-                                try:
-                                    settings = labeling_obj.settings()
-                                    if settings and hasattr(settings, 'fieldName') and settings.fieldName():
-                                        should_copy = True
-                                        reason = f"etichette configurate (campo: {settings.fieldName()})"
-                                except:
-                                    pass
-
-                            if should_copy:
-                                cloned_labeling = labeling_obj.clone()
-                                # Memorizza per applicazione successiva
-                                pending_labeling.append((new_qgis_layer, cloned_labeling, reason, original_layer))
-
-                                QgsMessageLog.logMessage(
-                                    f"Etichette programmate per copia nel layer {original_layer.name()} ({reason})",
-                                    "ExportLayersWithinArea",
-                                    level=Qgis.Info,
-                                )
-                            else:
-                                QgsMessageLog.logMessage(
-                                    f"Etichette non copiate per il layer {original_layer.name()} - {labeling_type} disabilitate o vuote",
-                                    "ExportLayersWithinArea",
-                                    level=Qgis.Info,
-                                )
-                        except Exception as e:
-                            QgsMessageLog.logMessage(
-                                f"Errore nella preparazione delle etichette per {original_layer.name()}: {str(e)}",
-                                "ExportLayersWithinArea",
-                                level=Qgis.Warning,
-                            )
-                    else:
-                        QgsMessageLog.logMessage(
-                            f"Nessuna configurazione di etichette trovata per il layer {original_layer.name()}",
-                            "ExportLayersWithinArea",
-                            level=Qgis.Info,
-                        )
-
-                    new_qgis_layer.triggerRepaint()
-            elif original_layer.type() == QgsMapLayer.RasterLayer:
-                # Layer raster: crea una nuova istanza per il nuovo progetto
-                # Per XYZ Tiles, il 'path' è la stringa di connessione URI, usiamo 'wms' come provider key
-                new_qgis_layer = QgsRasterLayer(path, original_layer.name(), "wms") # Aggiunto il provider 'wms'
-                if new_qgis_layer.isValid():
-                    new_qgis_layer.setOpacity(original_layer.opacity()) # Imposta l'opacità
-                    
-                    # Clona e applica il renderer del layer originale per conservare tutte le proprietà di rendering
-                    if original_layer.renderer() is not None:
-                        new_qgis_layer.setRenderer(original_layer.renderer().clone())
-                    
-                    new_qgis_layer.triggerRepaint()
-            
-            if new_qgis_layer and new_qgis_layer.isValid():
-                # Aggiungi il layer al nuovo progetto e mappa l'ID originale al nuovo layer
-                new_project.addMapLayer(new_qgis_layer, False) # Non aggiungerlo alla radice per ora
-                exported_layers_map[original_layer.id()] = new_qgis_layer
-            else:
-                QgsMessageLog.logMessage(
-                    f"Impossibile caricare il layer {original_layer.name()} dal percorso {path}",
-                    "ExportLayersWithinArea",
-                    level=Qgis.Warning,
-                )
-
-        # Ricostruisci l'albero dei layer nel nuovo progetto
-        original_root = project.layerTreeRoot()
-        new_root = new_project.layerTreeRoot()
-        # Chiamata iniziale a _rebuild_layer_tree
-        self._rebuild_layer_tree(original_root, new_root, exported_layers_map)
-
-        # Applica le configurazioni delle etichette ora che tutti i layer sono stati aggiunti
-        self._apply_pending_labeling(pending_labeling)
-
-        # Copia le relazioni dal progetto originale al nuovo progetto
-        self._copy_project_relations(project, new_project, exported_layers_map)
-
-        if not new_project.write():
+        if not project.write():
             QgsMessageLog.logMessage(
-                f"Impossibile salvare il progetto QGIS: {new_project.error().message()}",
+                f"Impossibile salvare il progetto QGIS: {project.error().message()}",
                 "ExportLayersWithinArea",
                 level=Qgis.Critical,
             )
             QMessageBox.critical(
                 self.iface.mainWindow(),
                 self.tr("Export Layers Within Area"),
-                self.tr(f"Errore nel salvataggio del progetto QGIS."),
+                self.tr("Errore nel salvataggio del progetto QGIS."),
             )
             return
-        
-        # Apre il nuovo progetto
-        self.iface.messageBar().pushInfo(
+
+        # Log di completamento
+        num_layers = len(project.mapLayers())
+        num_relations = len(project.relationManager().relations())
+        QgsMessageLog.logMessage(
+            f"Progetto v2.0.0 completato - Layer: {num_layers}, Relazioni: {num_relations}, File: {qgz_filename}",
+            "ExportLayersWithinArea",
+            level=Qgis.Info,
+        )
+
+        # Mostra messaggio di successo
+        self.iface.messageBar().pushSuccess(
             self.tr("Export Layers Within Area"),
             self.tr("Progetto QGIS creato: {project_path}").format(project_path=qgz_filename),
         )
@@ -354,73 +241,14 @@ class ExportLayersWithinAreaPlugin:
         )
 
         if reply == QMessageBox.StandardButton.Yes:
-            QgsProject.instance().clear() # Chiude il progetto corrente
-            QgsProject.instance().read(new_project.fileName()) # Apre il nuovo progetto
-
-    def _rebuild_layer_tree(self, original_node: QgsLayerTreeGroup, new_parent_group: QgsLayerTreeGroup, exported_layers_map: dict) -> bool:
-        # Controlla se il gruppo contiene layer da esportare
-        group_contains_exported_layers = False
-        for child in original_node.children():
-            if child.nodeType() == QgsLayerTree.NodeLayer:
-                original_layer = child.layer()
-                if original_layer and original_layer.id() in exported_layers_map:
-                    new_layer = exported_layers_map[original_layer.id()]
-                    tree_layer_node = new_parent_group.addLayer(new_layer) # Cattura il nodo dell'albero del layer
-                    # Imposta la visibilità del nodo dell'albero del layer uguale a quella del layer originale
-                    tree_layer_node.setItemVisibilityChecked(child.isVisible())
-                    
-                    # Copia le impostazioni di scale visibility dal layer originale al nuovo layer
-                    if isinstance(child, QgsLayerTreeLayer) and new_layer is not None:
-                        try:
-                            # Le impostazioni di scale visibility sono sul layer, non sul node dell'albero
-                            original_layer = child.layer()
-                            if original_layer and hasattr(original_layer, 'hasScaleBasedVisibility') and hasattr(new_layer, 'setScaleBasedVisibility'):
-                                if original_layer.hasScaleBasedVisibility():
-                                    new_layer.setScaleBasedVisibility(True)
-                                    if hasattr(original_layer, 'minimumScale') and hasattr(original_layer, 'maximumScale'):
-                                        if hasattr(new_layer, 'setMinimumScale') and hasattr(new_layer, 'setMaximumScale'):
-                                            new_layer.setMinimumScale(original_layer.minimumScale())
-                                            new_layer.setMaximumScale(original_layer.maximumScale())
-                        except Exception as e:
-                            # In caso di errore con le impostazioni di scale visibility, continua senza errori
-                            QgsMessageLog.logMessage(
-                                f"Impossibile copiare le impostazioni di scale visibility per il layer {new_layer.name()}: {str(e)}",
-                                "ExportLayersWithinArea",
-                                level=Qgis.Warning,
-                            )
-                    
-                    group_contains_exported_layers = True
-            elif child.nodeType() == QgsLayerTree.NodeGroup:
-                # Crea un nuovo gruppo nel progetto esportato
-                new_group = new_parent_group.addGroup(child.name())
-                # Ricorsione per i sottogruppi e i layer
-                if self._rebuild_layer_tree(child, new_group, exported_layers_map):
-                    group_contains_exported_layers = True
-                else:
-                    # Se il sottogruppo è vuoto, rimuovilo tramite indice
-                    # Questo è più robusto per versioni di QGIS che non accettano l'oggetto diretto
-                    try:
-                        idx = -1
-                        for i, child_node in enumerate(new_parent_group.children()):
-                            if child_node == new_group:
-                                idx = i
-                                break
-                        
-                        if idx != -1:
-                            new_parent_group.removeChildren(idx, 1)
-                        else:
-                            QgsMessageLog.logMessage(
-                                f"Errore: Il gruppo {new_group.name()} non è stato trovato per la rimozione.",
-                                "ExportLayersWithinArea",
-                                level=Qgis.Warning,
-                            )
-                    except ValueError:
-                        QgsMessageLog.logMessage(
-                            f"Errore: Il gruppo {new_group.name()} non è stato trovato per la rimozione.",
-                            "ExportLayersWithinArea",
-                            level=Qgis.Warning,
-                        )
-        return group_contains_exported_layers
+            # Ricarica il progetto dalla nuova posizione
+            success = QgsProject.instance().read(final_project_path)
+            if not success:
+                QMessageBox.warning(
+                    self.iface.mainWindow(),
+                    self.tr("Errore apertura progetto"),
+                    self.tr("Impossibile aprire il progetto esportato."),
+                )
 
     def _fetch_feature_by_id(self, layer: QgsVectorLayer, feature_id: int):
         request = QgsFeatureRequest().setFilterFid(feature_id)
@@ -525,8 +353,8 @@ class ExportLayersWithinAreaPlugin:
             self.tr("Esportazione completata: {count} file creati").format(count=len(exported_data)),
         )
 
-        # Crea il progetto QGIS
-        self._create_qgis_project(exported_data, export_directory)
+        # Crea il progetto QGIS usando il nuovo approccio v2.0.0
+        self._create_qgis_project_v2(exported_data, export_directory)
 
     def _on_export_error(self, error_message: str) -> None:
         """Gestisce gli errori durante l'esportazione."""
@@ -556,171 +384,6 @@ class ExportLayersWithinAreaPlugin:
             self.tr("Export Layers Within Area"),
             self.tr("Esportazione cancellata"),
         )
-
-    def _validate_labeling_in_new_layer(self, labeling, new_layer, original_layer):
-        """Valida se le etichette copiate sono utilizzabili nel nuovo layer."""
-        issues = []
-        new_fields = [field.name() for field in new_layer.fields()]
-
-        try:
-            labeling_type = type(labeling).__name__
-
-            if labeling_type == 'QgsRuleBasedLabeling':
-                # Per le etichette basate su regole, facciamo una validazione minima
-                # poiché la struttura può variare tra versioni di QGIS
-                try:
-                    # Proviamo ad accedere alla regola root per vedere se è valida
-                    root_rule = labeling.rootRule()
-                    if root_rule is None:
-                        issues.append("regola root mancante")
-                    # Non facciamo validazione dettagliata delle singole regole per evitare errori API
-                except Exception as e:
-                    issues.append(f"struttura regole non valida: {str(e)[:30]}")
-
-            elif hasattr(labeling, 'settings'):
-                # Per etichette semplici
-                try:
-                    settings = labeling.settings()
-                    if hasattr(settings, 'fieldName') and settings.fieldName():
-                        field_name = settings.fieldName()
-                        if field_name not in new_fields:
-                            issues.append(f"campo '{field_name}' mancante")
-                except Exception as e:
-                    issues.append(f"impostazioni non valide: {str(e)[:30]}")
-
-        except Exception as e:
-            issues.append(f"errore validazione: {str(e)[:30]}")
-
-        return issues
-
-    def _apply_pending_labeling(self, pending_labeling):
-        """Applica le configurazioni delle etichette dopo che tutti i layer sono stati aggiunti al progetto."""
-        for new_layer, cloned_labeling, reason, original_layer in pending_labeling:
-            try:
-                # Prima aggiorna i campi del layer per assicurarsi che siano disponibili
-                new_layer.updateFields()
-
-                # Applica effettivamente le etichette ora che il layer è nel progetto
-                new_layer.setLabeling(cloned_labeling)
-
-                # Forza il riconoscimento del tipo di etichettatura
-                # Proviamo diversi approcci per assicurarci che il labeling mode sia corretto
-                labeling_type = type(cloned_labeling).__name__
-
-                # Per rule-based labeling, potrebbe essere necessario un approccio specifico
-                if labeling_type == 'QgsRuleBasedLabeling':
-                    # Assicurati che il layer riconosca che ha rule-based labeling attivo
-                    try:
-                        # Alcuni metodi che potrebbero aiutare
-                        if hasattr(new_layer, 'setLabelsEnabled'):
-                            new_layer.setLabelsEnabled(True)
-                        if hasattr(new_layer, 'enableLabels'):
-                            new_layer.enableLabels(True)
-                        # Forza il refresh del labeling
-                        if hasattr(new_layer, 'refreshLabeling'):
-                            new_layer.refreshLabeling()
-                    except:
-                        pass
-
-                # Aggiorna il layer nel progetto per assicurarsi che riconosca le modifiche
-                new_layer.emitStyleChanged()
-
-                # Forza l'aggiornamento
-                try:
-                    new_layer.labelingChanged.emit()
-                except:
-                    pass  # Il segnale potrebbe non esistere in alcune versioni
-
-                new_layer.triggerRepaint()
-
-                # Verifica che le etichette siano state applicate
-                if new_layer.labeling() is not None:
-                    labeling_type = type(new_layer.labeling()).__name__
-                    status_msg = f"Etichette applicate correttamente al layer {new_layer.name()} "
-                    status_msg += f"({reason}) - Tipo: {labeling_type}"
-                else:
-                    status_msg = f"ATTENZIONE: Etichette NON applicate al layer {new_layer.name()} ({reason})"
-
-                QgsMessageLog.logMessage(
-                    status_msg,
-                    "ExportLayersWithinArea",
-                    level=Qgis.Info,
-                )
-
-            except Exception as e:
-                QgsMessageLog.logMessage(
-                    f"Errore nell'applicazione delle etichette per {new_layer.name()}: {str(e)}",
-                    "ExportLayersWithinArea",
-                    level=Qgis.Warning,
-                )
-
-    def _copy_project_relations(self, original_project: QgsProject, new_project: QgsProject, exported_layers_map: dict) -> None:
-        """Copia le relazioni dal progetto originale al nuovo progetto esportato.
-
-        Args:
-            original_project: Il progetto originale
-            new_project: Il nuovo progetto esportato
-            exported_layers_map: Mappatura dagli ID originali ai nuovi layer esportati
-        """
-        original_relation_manager = original_project.relationManager()
-        new_relation_manager = new_project.relationManager()
-
-        # Crea il mapping dagli ID originali ai nuovi ID dei layer esportati
-        reverse_layer_map = {original_layer_id: new_layer.id()
-                           for original_layer_id, new_layer in exported_layers_map.items()}
-
-        # Copia ogni relazione esistente
-        for relation in original_relation_manager.relations().values():
-            referencing_layer_id = relation.referencingLayerId()
-            referenced_layer_id = relation.referencedLayerId()
-
-            # Verifica se entrambi i layer della relazione sono stati esportati
-            if (referencing_layer_id in reverse_layer_map and
-                referenced_layer_id in reverse_layer_map):
-
-                try:
-                    # Crea una nuova relazione con i riferimenti ai nuovi layer
-                    new_relation = QgsRelation()
-                    new_relation.setId(relation.id())
-                    new_relation.setName(relation.name())
-                    new_relation.setReferencingLayer(reverse_layer_map[referencing_layer_id])
-                    new_relation.setReferencedLayer(reverse_layer_map[referenced_layer_id])
-                    new_relation.setReferencingLayerFields(relation.referencingFields())
-                    new_relation.setReferencedLayerFields(relation.referencedFields())
-                    new_relation.setStrength(relation.strength())
-
-                    # Aggiungi la relazione al nuovo progetto
-                    if new_relation_manager.addRelation(new_relation):
-                        QgsMessageLog.logMessage(
-                            f"Relazione '{relation.name()}' copiata nel progetto esportato",
-                            "ExportLayersWithinArea",
-                            level=Qgis.Info,
-                        )
-                    else:
-                        QgsMessageLog.logMessage(
-                            f"Impossibile copiare la relazione '{relation.name()}'",
-                            "ExportLayersWithinArea",
-                            level=Qgis.Warning,
-                        )
-                except Exception as e:
-                    QgsMessageLog.logMessage(
-                        f"Errore nella copia della relazione '{relation.name()}': {str(e)}",
-                        "ExportLayersWithinArea",
-                        level=Qgis.Warning,
-                    )
-            else:
-                # Salta le relazioni che coinvolgono layer non esportati
-                missing_layers = []
-                if referencing_layer_id not in reverse_layer_map:
-                    missing_layers.append("referencing")
-                if referenced_layer_id not in reverse_layer_map:
-                    missing_layers.append("referenced")
-
-                QgsMessageLog.logMessage(
-                    f"Relazione '{relation.name()}' saltata: layer {', '.join(missing_layers)} non esportato(i)",
-                    "ExportLayersWithinArea",
-                    level=Qgis.Info,
-                )
 
     def _check_database_layers_accessibility(self, layers: List[QgsMapLayer]) -> List[str]:
         """Verifica l'accessibilità dei layer connessi a database prima dell'esportazione.
