@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Simplified export workflow**: Eliminates the need to manually recreate layer groups, styles, and project settings after export
 - **Layer cleanup**: Automatically removes non-exported layers from the copied project
 - **Group cleanup**: Automatically removes empty groups from the layer tree after layer removal
+- **Empty table export**: Tables without geometry are now exported even when empty, preserving their structure for future use
 
 ### Changed
 - **Export method**: Completely redesigned the project creation logic to use project copying instead of building from scratch

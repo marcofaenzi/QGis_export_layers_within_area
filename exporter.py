@@ -145,8 +145,7 @@ class LayerExporter:
                         level=Qgis.Info,
                     )
                     features = self._all_features(layer)
-                    if not features:
-                        continue
+                    # I layer senza geometria vengono sempre esportati, anche se vuoti
                 elif use_clipping:
                     # Logica di esportazione per layer vettoriali con geometria (con filtro spaziale)
                     geom_for_layer = QgsGeometry(union_geom)
