@@ -268,10 +268,13 @@ class ExportLayersWithinAreaPlugin:
                 level=Qgis.Info,
             )
 
-        # PASSO 5: Rimuovi i gruppi vuoti dall'albero dei layer
+        # PASSO 5: Aggiorna i datasource dei layer esportati per puntare ai GeoPackage
+        self._update_exported_project_datasources(new_project, exported_data)
+
+        # PASSO 6: Rimuovi i gruppi vuoti dall'albero dei layer
         self._remove_empty_groups(new_project.layerTreeRoot())
 
-        # PASSO 6: Salva il progetto modificato
+        # PASSO 7: Salva il progetto modificato
         new_project.setFileName(final_project_path)
         QgsMessageLog.logMessage(
             f"Salvataggio progetto modificato in: {final_project_path}",
@@ -328,6 +331,53 @@ class ExportLayersWithinAreaPlugin:
             self.tr("Export Layers Within Area"),
             self.tr("Progetto QGIS creato: {project_path}").format(project_path=final_project_path),
         )
+
+    def _update_exported_project_datasources(self, exported_project: QgsProject, exported_data: List[Tuple[str, QgsMapLayer]]) -> None:
+        """Aggiorna i datasource dei layer nel progetto esportato per puntare ai GeoPackage esportati.
+
+        Args:
+            exported_project: Il progetto esportato da modificare
+            exported_data: Lista di tuple (percorso_file, layer_originale)
+        """
+        # Crea una mappatura da layer originale a percorso esportato
+        exported_paths = {original_layer.id(): path for path, original_layer in exported_data}
+
+        updated_layers = []
+
+        # Aggiorna i datasource dei layer nel progetto esportato
+        for layer_id, layer in exported_project.mapLayers().items():
+            if layer_id in exported_paths:
+                new_path = exported_paths[layer_id]
+
+                if layer.type() == QgsMapLayer.VectorLayer:
+                    # Aggiorna il datasource del layer vettoriale
+                    old_datasource = layer.source()
+                    layer.setDataSource(new_path, layer.name(), "ogr")
+
+                    if layer.isValid():
+                        updated_layers.append(layer.name())
+                        QgsMessageLog.logMessage(
+                            f"Datasource aggiornato nel progetto esportato per layer '{layer.name()}': {os.path.basename(new_path)}",
+                            "ExportLayersWithinArea",
+                            level=Qgis.Info,
+                        )
+                    else:
+                        # Se l'aggiornamento fallisce, mostra un warning
+                        QgsMessageLog.logMessage(
+                            f"Impossibile aggiornare datasource per layer '{layer.name()}' nel progetto esportato",
+                            "ExportLayersWithinArea",
+                            level=Qgis.Warning,
+                        )
+                        # Ripristina il datasource (anche se potrebbe non funzionare)
+                        layer.setDataSource(old_datasource, layer.name(), layer.providerType())
+
+        if updated_layers:
+            layer_list = ", ".join(updated_layers)
+            QgsMessageLog.logMessage(
+                f"Progetto esportato aggiornato: {len(updated_layers)} layer ora puntano ai GeoPackage ({layer_list})",
+                "ExportLayersWithinArea",
+                level=Qgis.Info,
+            )
 
     def _remove_empty_groups(self, root_group: QgsLayerTreeGroup) -> None:
         """Rimuove ricorsivamente i gruppi vuoti dall'albero dei layer.
