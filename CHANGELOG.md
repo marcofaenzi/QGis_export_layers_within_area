@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Project copying approach**: Instead of creating a new empty project, the plugin now copies the existing QGIS project and updates only the datasource paths of exported layers
 - **Complete configuration preservation**: All project settings, groups, relations, styles, and configurations are automatically preserved in the exported project
 - **Simplified export workflow**: Eliminates the need to manually recreate layer groups, styles, and project settings after export
+- **Layer cleanup**: Automatically removes non-exported layers from the copied project
+- **Group cleanup**: Automatically removes empty groups from the layer tree after layer removal
 
 ### Changed
 - **Export method**: Completely redesigned the project creation logic to use project copying instead of building from scratch
