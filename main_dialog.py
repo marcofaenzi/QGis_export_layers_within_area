@@ -71,17 +71,18 @@ class MainDialog(QDialog):
         self._export_within_area_radio = QRadioButton("Esporta solo elementi nei poligoni selezionati", self)
         self._export_within_area_radio.toggled.connect(self._on_export_mode_changed)
 
-        # Imposta il radiobutton corretto basato sulla modalità precedente
-        if self._export_mode == "all_features":
-            self._export_all_radio.setChecked(True)
-        else:
-            self._export_within_area_radio.setChecked(True)
-
         export_mode_layout.addWidget(self._export_all_radio)
         export_mode_layout.addWidget(self._export_within_area_radio)
 
         # Sezione informazioni poligono (visibile solo se si sceglie "within_area")
         self._polygon_info_box = QGroupBox("Poligono di ritaglio", self)
+
+        # Imposta il radiobutton corretto basato sulla modalità precedente
+        # (dopo aver creato _polygon_info_box per evitare errori)
+        if self._export_mode == "all_features":
+            self._export_all_radio.setChecked(True)
+        else:
+            self._export_within_area_radio.setChecked(True)
         polygon_info_layout = QVBoxLayout(self._polygon_info_box)
         polygon_info_layout.addWidget(QLabel(f"Layer configurato: {polygon_layer.name()}"))
         polygon_info_layout.addWidget(self._feature_label)
@@ -100,8 +101,8 @@ class MainDialog(QDialog):
         layout.addLayout(directory_name_layout)
         layout.addWidget(buttons)
 
-        # Inizializza lo stato della sezione poligoni (disabilitata per default)
-        self._polygon_info_box.setEnabled(False)
+        # Inizializza lo stato della sezione poligoni basato sulla modalità selezionata
+        self._polygon_info_box.setEnabled(self._export_mode == "within_area")
 
     def _set_default_directory_name(self) -> None:
         """Imposta il nome predefinito della directory nel formato YYYY-MM-DD_nome_progetto."""

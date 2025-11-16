@@ -38,13 +38,13 @@ class ExportLayersWithinAreaPlugin:
     def initGui(self) -> None:
         # Icona esportazione personalizzata
         export_icon_path = os.path.join(self.plugin_dir, "icons", "export_map.svg")
-        export_action = QAction(QIcon(export_icon_path), self.tr("Esporta layer nel poligono"), self.iface.mainWindow())
+        export_action = QAction(QIcon(export_icon_path), self.tr("Esporta layer nell'area selezionata"), self.iface.mainWindow())
         export_action.triggered.connect(self.run)
         self.actions.append(export_action)
 
         # Icona configurazione personalizzata  
         settings_icon_path = os.path.join(self.plugin_dir, "icons", "setting_map.svg")
-        config_action = QAction(QIcon(settings_icon_path), self.tr("Configura layer poligonale"), self.iface.mainWindow())
+        config_action = QAction(QIcon(settings_icon_path), self.tr("Configura l'area di selezione"), self.iface.mainWindow())
         config_action.triggered.connect(self.open_configuration)
         self.actions.append(config_action)
 

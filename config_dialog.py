@@ -57,7 +57,7 @@ class ConfigDialog(QDialog):
         buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Layer poligonale di riferimento:"))
+        layout.addWidget(QLabel("Layer poligonale di selezione:"))
         layout.addWidget(self._combo)
         layout.addWidget(QLabel("Cartella di esportazione:"))
         layout.addLayout(output_dir_layout)
