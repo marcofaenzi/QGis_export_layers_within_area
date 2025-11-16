@@ -7,10 +7,10 @@ about=Il plugin permette di configurare un layer poligonale di riferimento e di 
 version=2.0.0
 author=Marco Faenzi
 email=marco.faenzi@gmail.com
-#tracker=https://example.com/issues
-#repository=https://example.com/repo
+tracker=https://github.com/marcofaenzi/QGis_export_layers_within_area/issues
+repository=https://github.com/marcofaenzi/QGis_export_layers_within_area
 category=Exporting
 icon=icons/plugin.svg
 experimental=False
 deprecated=False
-
+homepage=https://github.com/marcofaenzi/QGis_export_layers_within_area/blob/main/README.md
