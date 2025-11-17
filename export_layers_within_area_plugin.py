@@ -3,7 +3,7 @@
 import os
 from typing import List, Optional, Tuple, Union, Iterable
 
-from qgis.PyQt.QtCore import QCoreApplication, QSettings
+from qgis.PyQt.QtCore import QCoreApplication, QSettings, QTranslator, QLocale
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox, QProgressBar, QPushButton
 
@@ -35,7 +35,41 @@ class ExportLayersWithinAreaPlugin:
     def tr(self, message: str) -> str:
         return QCoreApplication.translate("ExportLayersWithinArea", message)
 
+    def _load_translations(self) -> None:
+        """Carica le traduzioni basate sulla lingua di QGIS."""
+        # Ottieni la lingua di QGIS
+        locale = QgsApplication.locale()
+        self._log_message(f"Lingua QGIS rilevata: {locale}", Qgis.Info)
+
+        # Prova prima la lingua completa (es. it_IT), poi solo la lingua (es. it)
+        translations_dir = os.path.join(self.plugin_dir, "i18n")
+        translator = QTranslator()
+
+        # Lista delle varianti da provare in ordine di priorità
+        locale_variants = [locale]  # Locale completo (es. it_IT)
+
+        # Aggiungi variante con solo la lingua se diversa
+        if '_' in locale:
+            language_only = locale.split('_')[0]
+            if language_only != locale:
+                locale_variants.append(language_only)  # Solo lingua (es. it)
+
+        # Prova ogni variante
+        for locale_variant in locale_variants:
+            qm_file = f"export_layers_within_area_{locale_variant}.qm"
+            qm_path = os.path.join(translations_dir, qm_file)
+            self._log_message(f"Cercando traduzioni: {qm_path}", Qgis.Info)
+            if os.path.exists(qm_path) and translator.load(qm_path):
+                QCoreApplication.installTranslator(translator)
+                self._log_message(f"Traduzioni caricate: {locale_variant}", Qgis.Info)
+                return
+
+        self._log_message("Nessun file di traduzione trovato, uso lingua inglese di default", Qgis.Info)
+
     def initGui(self) -> None:
+        # Carica le traduzioni
+        self._load_translations()
+
         # Icona esportazione personalizzata
         export_icon_path = os.path.join(self.plugin_dir, "icons", "export_map.svg")
         export_action = QAction(QIcon(export_icon_path), self.tr("Esporta layer nell'area selezionata"), self.iface.mainWindow())

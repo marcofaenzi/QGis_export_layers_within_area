@@ -16,15 +16,20 @@ from qgis.PyQt.QtWidgets import (
     QVBoxLayout,
 )
 
+from qgis.PyQt.QtCore import QCoreApplication
 from qgis.core import QgsMapLayer, QgsProject, QgsWkbTypes
 
 
 class ConfigDialog(QDialog):
     """Dialog per selezionare il layer poligonale di riferimento."""
 
+    def tr(self, message: str) -> str:
+        """Traduzione delle stringhe."""
+        return QCoreApplication.translate("ConfigDialog", message)
+
     def __init__(self, parent=None, current_layer_id: Optional[str] = None, current_output_dir: Optional[str] = None, logging_enabled: bool = True) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Configurazione Export Layers Within Area")
+        self.setWindowTitle(self.tr("Export Layers Within Area Configuration"))
 
         self._layers: List[Tuple[str, str]] = []
         self._combo = QComboBox(self)
@@ -33,11 +38,11 @@ class ConfigDialog(QDialog):
         self._build_layer_list(current_layer_id)
 
         self._output_dir_edit = QLineEdit(self)
-        self._output_dir_edit.setPlaceholderText("Seleziona una cartella di destinazione")
+        self._output_dir_edit.setPlaceholderText(self.tr("Select a destination folder"))
         default_path = QgsProject.instance().homePath() or os.path.expanduser("~")
         self._output_dir_edit.setText(current_output_dir or default_path)
 
-        browse_button = QPushButton("Sfoglia", self)
+        browse_button = QPushButton(self.tr("Browse"), self)
         browse_button.clicked.connect(self._choose_output_dir)
 
         output_dir_layout = QHBoxLayout()
@@ -45,9 +50,9 @@ class ConfigDialog(QDialog):
         output_dir_layout.addWidget(browse_button)
 
         # Checkbox per abilitare/disabilitare i log
-        self._logging_checkbox = QCheckBox("Abilita logging dettagliato", self)
+        self._logging_checkbox = QCheckBox(self.tr("Enable detailed logging"), self)
         self._logging_checkbox.setChecked(logging_enabled)
-        self._logging_checkbox.setToolTip("Abilita/disabilita i messaggi di log dettagliati durante l'esportazione")
+        self._logging_checkbox.setToolTip(self.tr("Enable/disable detailed log messages during export"))
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
@@ -57,9 +62,9 @@ class ConfigDialog(QDialog):
         buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Layer poligonale di selezione:"))
+        layout.addWidget(QLabel(self.tr("Selection polygon layer:")))
         layout.addWidget(self._combo)
-        layout.addWidget(QLabel("Cartella di esportazione:"))
+        layout.addWidget(QLabel(self.tr("Export folder:")))
         layout.addLayout(output_dir_layout)
         layout.addWidget(self._logging_checkbox)
         layout.addWidget(buttons)
@@ -99,7 +104,7 @@ class ConfigDialog(QDialog):
 
     def _choose_output_dir(self) -> None:
         directory = QFileDialog.getExistingDirectory(
-            self, "Seleziona cartella di destinazione", self._output_dir_edit.text()
+            self, self.tr("Select destination folder"), self._output_dir_edit.text()
         )
         if directory:
             self._output_dir_edit.setText(directory)

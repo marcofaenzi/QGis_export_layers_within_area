@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 from typing import List, Optional
 
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import Qt, QCoreApplication
 from qgis.PyQt.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -26,6 +26,10 @@ from qgis.core import Qgis
 class MainDialog(QDialog):
     """Dialog che permette di selezionare i layer da esportare e il poligono."""
 
+    def tr(self, message: str) -> str:
+        """Traduzione delle stringhe."""
+        return QCoreApplication.translate("MainDialog", message)
+
     def __init__(self, parent: QWidget, polygon_layer: QgsVectorLayer, previously_selected_layer_ids: Optional[List[str]] = None, logging_enabled: bool = True, last_export_mode: str = "all_features") -> None:
         super().__init__(parent)
         self._polygon_layer = polygon_layer
@@ -35,7 +39,7 @@ class MainDialog(QDialog):
         self._export_mode = last_export_mode  # Usa la modalità precedente invece di default
         self._logging_enabled = logging_enabled
 
-        self.setWindowTitle("Export Layers Within Area")
+        self.setWindowTitle(self.tr("Export Layers Within Area"))
         self.resize(540, 480)
 
         self._feature_label = QLabel(self)
@@ -43,39 +47,39 @@ class MainDialog(QDialog):
         self._refresh_feature_label()
 
         self._layer_tree = QTreeWidget(self)
-        self._layer_tree.setHeaderLabel("Layer")
+        self._layer_tree.setHeaderLabel(self.tr("Layer"))
         self._layer_tree.setColumnCount(1)
         self._populate_layer_list(self._previously_selected_layer_ids)
 
         # Campo per il nome della directory
         self._directory_name_edit = QLineEdit(self)
-        self._directory_name_edit.setPlaceholderText("Nome del progetto esportato")
+        self._directory_name_edit.setPlaceholderText(self.tr("Exported project name"))
         self._set_default_directory_name()
         
-        directory_name_label = QLabel("Nome del progetto esportato:", self)
+        directory_name_label = QLabel(self.tr("Exported project name:"), self)
         directory_name_layout = QVBoxLayout()
         directory_name_layout.addWidget(directory_name_label)
         directory_name_layout.addWidget(self._directory_name_edit)
 
-        selection_box = QGroupBox("Layer da esportare", self)
+        selection_box = QGroupBox(self.tr("Layers to export"), self)
         selection_layout = QVBoxLayout(selection_box)
         selection_layout.addWidget(self._layer_tree)
 
         # Sezione modalità di esportazione
-        export_mode_box = QGroupBox("Modalità di esportazione", self)
+        export_mode_box = QGroupBox(self.tr("Export mode"), self)
         export_mode_layout = QVBoxLayout(export_mode_box)
 
-        self._export_all_radio = QRadioButton("Esporta tutti gli elementi", self)
+        self._export_all_radio = QRadioButton(self.tr("Export all features"), self)
         self._export_all_radio.toggled.connect(self._on_export_mode_changed)
 
-        self._export_within_area_radio = QRadioButton("Esporta solo elementi nei poligoni selezionati", self)
+        self._export_within_area_radio = QRadioButton(self.tr("Export only features within selected polygons"), self)
         self._export_within_area_radio.toggled.connect(self._on_export_mode_changed)
 
         export_mode_layout.addWidget(self._export_all_radio)
         export_mode_layout.addWidget(self._export_within_area_radio)
 
         # Sezione informazioni poligono (visibile solo se si sceglie "within_area")
-        self._polygon_info_box = QGroupBox("Poligono di ritaglio", self)
+        self._polygon_info_box = QGroupBox(self.tr("Clipping polygon"), self)
 
         # Imposta il radiobutton corretto basato sulla modalità precedente
         # (dopo aver creato _polygon_info_box per evitare errori)
@@ -84,7 +88,7 @@ class MainDialog(QDialog):
         else:
             self._export_within_area_radio.setChecked(True)
         polygon_info_layout = QVBoxLayout(self._polygon_info_box)
-        polygon_info_layout.addWidget(QLabel(f"Layer configurato: {polygon_layer.name()}"))
+        polygon_info_layout.addWidget(QLabel(self.tr("Configured layer: {layer_name}").format(layer_name=polygon_layer.name())))
         polygon_info_layout.addWidget(self._feature_label)
 
         buttons = QDialogButtonBox(
@@ -185,12 +189,12 @@ class MainDialog(QDialog):
     def _refresh_feature_label(self) -> None:
         if not self._selected_feature_ids:
             self._feature_label.setText(
-                "Seleziona almeno un poligono nel layer configurato prima di avviare l'esportazione."
+                self.tr("Select at least one polygon in the configured layer before starting the export.")
             )
         elif len(self._selected_feature_ids) == 1:
-            self._feature_label.setText("1 poligono selezionato")
+            self._feature_label.setText(self.tr("1 polygon selected"))
         else:
-            self._feature_label.setText(f"{len(self._selected_feature_ids)} poligoni selezionati")
+            self._feature_label.setText(self.tr("{count} polygons selected").format(count=len(self._selected_feature_ids)))
 
     def _on_export_mode_changed(self) -> None:
         """Gestisce il cambio di modalità di esportazione."""
@@ -208,12 +212,12 @@ class MainDialog(QDialog):
         # Validazione basata sulla modalità selezionata
         if self._export_mode == "within_area":
             if not self._selected_feature_ids:
-                QMessageBox.warning(self, "Export Layers Within Area", "Nessun poligono selezionato.")
+                QMessageBox.warning(self, self.tr("Export Layers Within Area"), self.tr("No polygon selected."))
                 return
         # Per "all_features" non è necessaria la selezione di poligoni
 
         if not self._layers_to_export:
-            QMessageBox.warning(self, "Export Layers Within Area", "Seleziona almeno un layer da esportare.")
+            QMessageBox.warning(self, self.tr("Export Layers Within Area"), self.tr("Select at least one layer to export."))
             return
 
         self.accept()
