@@ -13,4 +13,5 @@ category=Exporting
 icon=icons/plugin.svg
 experimental=False
 deprecated=False
+license=GPLv3
 homepage=https://github.com/marcofaenzi/QGis_export_layers_within_area/blob/main/README.md

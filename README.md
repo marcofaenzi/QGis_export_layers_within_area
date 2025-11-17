@@ -168,4 +168,4 @@ To report bugs or request features, use the project repository.
 
 ## License
 
-This plugin can only be distributed under GNU GPL v.2 or later license.
+This plugin can only be distributed under GNU GPL v.3 or later license.
