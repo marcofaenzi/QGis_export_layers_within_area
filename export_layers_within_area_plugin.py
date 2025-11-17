@@ -39,32 +39,65 @@ class ExportLayersWithinAreaPlugin:
         """Carica le traduzioni basate sulla lingua di QGIS."""
         # Ottieni la lingua di QGIS
         locale = QgsApplication.locale()
-        self._log_message(f"Lingua QGIS rilevata: {locale}", Qgis.Info)
+        self._log_message(f"Lingua QGIS rilevata: '{locale}'", Qgis.Info)
+
+        # Se locale è vuoto o "C", prova con altre fonti
+        if not locale or locale == "C":
+            # Prova con QLocale.system() come fallback
+            from qgis.PyQt.QtCore import QLocale
+            system_locale = QLocale.system().name()
+            self._log_message(f"Locale di sistema rilevato: '{system_locale}'", Qgis.Info)
+            if system_locale and system_locale != "C":
+                locale = system_locale
 
         # Prova prima la lingua completa (es. it_IT), poi solo la lingua (es. it)
         translations_dir = os.path.join(self.plugin_dir, "i18n")
+        self._log_message(f"Directory traduzioni: {translations_dir}", Qgis.Info)
+
+        # Lista dei file .qm disponibili per debug
+        if os.path.exists(translations_dir):
+            qm_files = [f for f in os.listdir(translations_dir) if f.endswith('.qm')]
+            self._log_message(f"File .qm disponibili: {qm_files}", Qgis.Info)
+
         translator = QTranslator()
 
         # Lista delle varianti da provare in ordine di priorità
-        locale_variants = [locale]  # Locale completo (es. it_IT)
+        locale_variants = []
+        if locale:
+            locale_variants.append(locale)  # Locale completo (es. it_IT)
+            # Aggiungi variante con solo la lingua se diversa
+            if '_' in locale:
+                language_only = locale.split('_')[0]
+                if language_only != locale:
+                    locale_variants.append(language_only)  # Solo lingua (es. it)
 
-        # Aggiungi variante con solo la lingua se diversa
-        if '_' in locale:
-            language_only = locale.split('_')[0]
-            if language_only != locale:
-                locale_variants.append(language_only)  # Solo lingua (es. it)
+        # Aggiungi sempre italiano come fallback se non è già incluso
+        if "it" not in locale_variants:
+            locale_variants.extend(["it", "it_IT"])
+
+        self._log_message(f"Varianti da provare: {locale_variants}", Qgis.Info)
 
         # Prova ogni variante
         for locale_variant in locale_variants:
             qm_file = f"export_layers_within_area_{locale_variant}.qm"
             qm_path = os.path.join(translations_dir, qm_file)
-            self._log_message(f"Cercando traduzioni: {qm_path}", Qgis.Info)
-            if os.path.exists(qm_path) and translator.load(qm_path):
-                QCoreApplication.installTranslator(translator)
-                self._log_message(f"Traduzioni caricate: {locale_variant}", Qgis.Info)
-                return
+            self._log_message(f"Provando: {qm_path}", Qgis.Info)
+            if os.path.exists(qm_path):
+                self._log_message(f"File esiste, caricando...", Qgis.Info)
+                if translator.load(qm_path):
+                    success = QCoreApplication.installTranslator(translator)
+                    self._log_message(f"Traduzioni caricate: {locale_variant} (installato: {success})", Qgis.Info)
 
-        self._log_message("Nessun file di traduzione trovato, uso lingua inglese di default", Qgis.Info)
+                    # Test immediato di una traduzione
+                    test_text = QCoreApplication.translate("MainDialog", "Layers to export")
+                    self._log_message(f"Test traduzione 'Layers to export' → '{test_text}'", Qgis.Info)
+                    return
+                else:
+                    self._log_message(f"Fallito caricamento: {qm_path}", Qgis.Warning)
+            else:
+                self._log_message(f"File non trovato: {qm_path}", Qgis.Info)
+
+        self._log_message("Nessun file di traduzione trovato, uso lingua inglese di default", Qgis.Warning)
 
     def initGui(self) -> None:
         # Carica le traduzioni
@@ -72,13 +105,13 @@ class ExportLayersWithinAreaPlugin:
 
         # Icona esportazione personalizzata
         export_icon_path = os.path.join(self.plugin_dir, "icons", "export_map.svg")
-        export_action = QAction(QIcon(export_icon_path), self.tr("Esporta layer nell'area selezionata"), self.iface.mainWindow())
+        export_action = QAction(QIcon(export_icon_path), self.tr("Export layers within selected area"), self.iface.mainWindow())
         export_action.triggered.connect(self.run)
         self.actions.append(export_action)
 
         # Icona configurazione personalizzata  
         settings_icon_path = os.path.join(self.plugin_dir, "icons", "setting_map.svg")
-        config_action = QAction(QIcon(settings_icon_path), self.tr("Configura l'area di selezione"), self.iface.mainWindow())
+        config_action = QAction(QIcon(settings_icon_path), self.tr("Configure selection area"), self.iface.mainWindow())
         config_action.triggered.connect(self.open_configuration)
         self.actions.append(config_action)
 
@@ -108,7 +141,7 @@ class ExportLayersWithinAreaPlugin:
                 settings.setValue("logging_enabled", logging_enabled)
                 settings.sync()
                 QMessageBox.information(
-                    self.iface.mainWindow(), self.tr("Configurazione"), self.tr("Impostazioni salvate correttamente."),
+                    self.iface.mainWindow(), self.tr("Configuration"), self.tr("Settings saved successfully."),
                 )
 
     def run(self) -> None:
@@ -117,7 +150,7 @@ class ExportLayersWithinAreaPlugin:
             QMessageBox.warning(
                 self.iface.mainWindow(),
                 self.tr("Export Layers Within Area"),
-                self.tr("Configura prima un layer poligonale tramite il pannello impostazioni."),
+                self.tr("Configure a polygon layer first via the settings panel."),
             )
             return
         
@@ -126,7 +159,7 @@ class ExportLayersWithinAreaPlugin:
             QMessageBox.warning(
                 self.iface.mainWindow(),
                 self.tr("Export Layers Within Area"),
-                self.tr("Configura prima una cartella di destinazione tramite il pannello impostazioni."),
+                self.tr("Configure an output folder first via the settings panel."),
             )
             return
         
@@ -148,7 +181,7 @@ class ExportLayersWithinAreaPlugin:
                 QMessageBox.warning(
                     self.iface.mainWindow(),
                     self.tr("Export Layers Within Area"),
-                    self.tr("Seleziona almeno un poligono nel layer configurato prima di procedere."),
+                    self.tr("Select at least one polygon in the configured layer before proceeding."),
                 )
                 return
 
@@ -162,7 +195,7 @@ class ExportLayersWithinAreaPlugin:
                 QMessageBox.warning(
                     self.iface.mainWindow(),
                     self.tr("Export Layers Within Area"),
-                    self.tr("Impossibile recuperare i poligoni selezionati o le geometrie non sono valide."),
+                    self.tr("Unable to retrieve selected polygons or geometries are invalid."),
                 )
                 return
         # Per "all_features", features rimane una lista vuota
@@ -172,7 +205,7 @@ class ExportLayersWithinAreaPlugin:
             QMessageBox.information(
                 self.iface.mainWindow(),
                 self.tr("Export Layers Within Area"),
-                self.tr("Nessun layer selezionato per l'esportazione."),
+                self.tr("No layers selected for export."),
             )
             return
 
@@ -183,11 +216,11 @@ class ExportLayersWithinAreaPlugin:
         if db_layers_issues:
             reply = QMessageBox.warning(
                 self.iface.mainWindow(),
-                self.tr("Problemi di connessione database"),
-                self.tr("Alcuni layer potrebbero avere problemi di connessione al database:\n\n{issues}\n\n"
-                       "Assicurati che le credenziali del database siano salvate nel progetto QGIS "
-                       "(Layer → Proprietà → Origine → Memorizza nella configurazione del progetto).\n\n"
-                       "Vuoi continuare comunque?").format(issues="\n".join(db_layers_issues)),
+                self.tr("Database connection issues"),
+                self.tr("Some layers may have database connection issues:\n\n{issues}\n\n"
+                       "Make sure database credentials are saved in the QGIS project "
+                       "(Layer → Properties → Source → Store in project configuration).\n\n"
+                       "Do you want to continue anyway?").format(issues="\n".join(db_layers_issues)),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No
             )
@@ -198,8 +231,8 @@ class ExportLayersWithinAreaPlugin:
         if self.export_worker is not None and self.export_worker.isRunning():
             reply = QMessageBox.question(
                 self.iface.mainWindow(),
-                self.tr("Esportazione già in corso"),
-                self.tr("È già in corso un'esportazione. Vuoi avviarne un'altra comunque?\n\nNota: L'esportazione precedente continuerà in background."),
+                self.tr("Export already in progress"),
+                self.tr("An export is already running. Do you want to start another one?\n\nNote: The previous export will continue in the background."),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No
             )
@@ -274,7 +307,7 @@ class ExportLayersWithinAreaPlugin:
             QMessageBox.critical(
                 self.iface.mainWindow(),
                 self.tr("Export Layers Within Area"),
-                self.tr("Errore nel caricamento della copia del progetto."),
+                self.tr("Error loading the copied project."),
             )
             try:
                 os.unlink(temp_path)
@@ -326,7 +359,7 @@ class ExportLayersWithinAreaPlugin:
             QMessageBox.critical(
                 self.iface.mainWindow(),
                 self.tr("Export Layers Within Area"),
-                self.tr("Errore nel salvataggio del progetto QGIS modificato."),
+                self.tr("Error saving the modified QGIS project."),
             )
             return
 
@@ -360,7 +393,7 @@ class ExportLayersWithinAreaPlugin:
         # Mostra messaggio di successo con percorso del progetto creato
         self.iface.messageBar().pushSuccess(
             self.tr("Export Layers Within Area"),
-            self.tr("Progetto QGIS creato: {project_path}").format(project_path=final_project_path),
+            self.tr("QGIS project created: {project_path}").format(project_path=final_project_path),
         )
 
     def _update_exported_project_datasources(self, exported_project: QgsProject, exported_data: List[Tuple[str, QgsMapLayer]]) -> None:
@@ -547,8 +580,8 @@ class ExportLayersWithinAreaPlugin:
         if self.export_worker is not None and self.export_worker.isRunning():
             reply = QMessageBox.question(
                 self.iface.mainWindow(),
-                self.tr("Annulla esportazione"),
-                self.tr("Sei sicuro di voler annullare l'esportazione in corso?"),
+                self.tr("Cancel export"),
+                self.tr("Are you sure you want to cancel the ongoing export?"),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No
             )
@@ -574,7 +607,7 @@ class ExportLayersWithinAreaPlugin:
         # Mostra messaggio di successo
         self.iface.messageBar().pushSuccess(
             self.tr("Export Layers Within Area"),
-            self.tr("Esportazione completata: {count} file creati").format(count=len(exported_data)),
+            self.tr("Export completed: {count} files created").format(count=len(exported_data)),
         )
 
         # Crea il progetto QGIS usando il nuovo approccio v2.0.0
@@ -606,7 +639,7 @@ class ExportLayersWithinAreaPlugin:
         # Mostra messaggio informativo
         self.iface.messageBar().pushInfo(
             self.tr("Export Layers Within Area"),
-            self.tr("Esportazione cancellata"),
+            self.tr("Export canceled"),
         )
 
     def _check_database_layers_accessibility(self, layers: List[QgsMapLayer]) -> List[str]:

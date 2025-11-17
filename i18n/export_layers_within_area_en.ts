@@ -52,131 +52,105 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../export_layers_within_area_plugin.py" line="67"/>
-        <source>Esporta layer nell&apos;area selezionata</source>
+        <location filename="../export_layers_within_area_plugin.py" line="110"/>
+        <source>Configuration</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../export_layers_within_area_plugin.py" line="73"/>
-        <source>Configura l&apos;area di selezione</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../export_layers_within_area_plugin.py" line="102"/>
-        <source>Configurazione</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../export_layers_within_area_plugin.py" line="102"/>
-        <source>Impostazioni salvate correttamente.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../export_layers_within_area_plugin.py" line="599"/>
+        <location filename="../export_layers_within_area_plugin.py" line="607"/>
         <source>Export Layers Within Area</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../export_layers_within_area_plugin.py" line="109"/>
-        <source>Configura prima un layer poligonale tramite il pannello impostazioni.</source>
+        <location filename="../export_layers_within_area_plugin.py" line="117"/>
+        <source>Configure a polygon layer first via the settings panel.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../export_layers_within_area_plugin.py" line="118"/>
-        <source>Configura prima una cartella di destinazione tramite il pannello impostazioni.</source>
+        <location filename="../export_layers_within_area_plugin.py" line="126"/>
+        <source>Configure an output folder first via the settings panel.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../export_layers_within_area_plugin.py" line="140"/>
-        <source>Seleziona almeno un poligono nel layer configurato prima di procedere.</source>
+        <location filename="../export_layers_within_area_plugin.py" line="148"/>
+        <source>Select at least one polygon in the configured layer before proceeding.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../export_layers_within_area_plugin.py" line="154"/>
-        <source>Impossibile recuperare i poligoni selezionati o le geometrie non sono valide.</source>
+        <location filename="../export_layers_within_area_plugin.py" line="162"/>
+        <source>Unable to retrieve selected polygons or geometries are invalid.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../export_layers_within_area_plugin.py" line="164"/>
-        <source>Nessun layer selezionato per l&apos;esportazione.</source>
+        <location filename="../export_layers_within_area_plugin.py" line="172"/>
+        <source>No layers selected for export.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../export_layers_within_area_plugin.py" line="176"/>
-        <source>Problemi di connessione database</source>
+        <location filename="../export_layers_within_area_plugin.py" line="184"/>
+        <source>Database connection issues</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../export_layers_within_area_plugin.py" line="176"/>
-        <source>Alcuni layer potrebbero avere problemi di connessione al database:
+        <location filename="../export_layers_within_area_plugin.py" line="199"/>
+        <source>An export is already running. Do you want to start another one?
 
-{issues}
-
-Assicurati che le credenziali del database siano salvate nel progetto QGIS (Layer → Proprietà → Origine → Memorizza nella configurazione del progetto).
-
-Vuoi continuare comunque?</source>
+Note: The previous export will continue in the background.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../export_layers_within_area_plugin.py" line="191"/>
-        <source>Esportazione già in corso</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../export_layers_within_area_plugin.py" line="191"/>
-        <source>È già in corso un'esportazione. Vuoi avviarne un'altra comunque?
-
-Nota: L'esportazione precedente continuerà in background.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../export_layers_within_area_plugin.py" line="252"/>
+        <location filename="../export_layers_within_area_plugin.py" line="260"/>
         <source>Errore nel salvataggio temporaneo del progetto.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../export_layers_within_area_plugin.py" line="266"/>
-        <source>Errore nel caricamento della copia del progetto.</source>
+        <location filename="../export_layers_within_area_plugin.py" line="274"/>
+        <source>Error loading the copied project.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../export_layers_within_area_plugin.py" line="318"/>
-        <source>Errore nel salvataggio del progetto QGIS modificato.</source>
+        <location filename="../export_layers_within_area_plugin.py" line="326"/>
+        <source>Error saving the modified QGIS project.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../export_layers_within_area_plugin.py" line="353"/>
-        <source>Progetto QGIS creato: {project_path}</source>
+        <location filename="../export_layers_within_area_plugin.py" line="361"/>
+        <source>QGIS project created: {project_path}</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../export_layers_within_area_plugin.py" line="516"/>
+        <location filename="../export_layers_within_area_plugin.py" line="524"/>
         <source>Annulla</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../export_layers_within_area_plugin.py" line="540"/>
-        <source>Annulla esportazione</source>
+        <location filename="../export_layers_within_area_plugin.py" line="548"/>
+        <source>Are you sure you want to cancel the ongoing export?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../export_layers_within_area_plugin.py" line="540"/>
-        <source>Sei sicuro di voler annullare l&apos;esportazione in corso?</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../export_layers_within_area_plugin.py" line="552"/>
+        <location filename="../export_layers_within_area_plugin.py" line="560"/>
         <source>Annullamento...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../export_layers_within_area_plugin.py" line="567"/>
-        <source>Esportazione completata: {count} file creati</source>
+        <location filename="../export_layers_within_area_plugin.py" line="575"/>
+        <source>Export completed: {count} files created</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../export_layers_within_area_plugin.py" line="599"/>
-        <source>Esportazione cancellata</source>
+        <location filename="../export_layers_within_area_plugin.py" line="75"/>
+        <source>Export layers within selected area</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../export_layers_within_area_plugin.py" line="81"/>
+        <source>Configure selection area</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../export_layers_within_area_plugin.py" line="110"/>
+        <source>Settings saved successfully.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
