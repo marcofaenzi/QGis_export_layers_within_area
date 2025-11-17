@@ -1,171 +1,171 @@
 # Export Layers Within Area
 
-Plugin QGIS per esportare layer vettoriali e raster limitando i contenuti agli elementi contenuti in uno o più poligoni selezionati.
+QGIS plugin for exporting vector and raster layers, limiting content to features contained within one or more selected polygons.
 
-## Scopo
+## Purpose
 
-Il plugin permette di esportare layer selezionati dal progetto QGIS corrente, limitandone i contenuti spaziali agli elementi che ricadono all'interno di poligoni precedentemente selezionati in un layer poligonale di riferimento.
+The plugin allows exporting selected layers from the current QGIS project, spatially limiting their content to features that fall within previously selected polygons in a reference polygon layer.
 
-È particolarmente utile per:
-- Creare sottoinsiemi spaziali di dati geografici
-- Esportare dati per specifiche aree di interesse
-- Preparare dataset per analisi territoriali mirate
+It is particularly useful for:
+- Creating spatial subsets of geographic data
+- Exporting data for specific areas of interest
+- Preparing datasets for targeted territorial analyses
 
-## Installazione
+## Installation
 
-1. Scaricare il plugin come archivio ZIP
-2. In QGIS, andare su `Plugins → Gestisci e installa plugin → Installa da ZIP`
-3. Selezionare il file ZIP scaricato e cliccare "Installa plugin"
-4. Attivare il plugin nella sezione "Installati"
+1. Download the plugin as a ZIP archive
+2. In QGIS, go to `Plugins → Manage and Install Plugins → Install from ZIP`
+3. Select the downloaded ZIP file and click "Install Plugin"
+4. Activate the plugin in the "Installed" section
 
-## Configurazione
+## Configuration
 
-### 1. Configurazione layer poligonale
+### 1. Polygon Layer Configuration
 
-Prima di utilizzare il plugin, è necessario configurare un layer poligonale che fungerà da riferimento spaziale:
+Before using the plugin, you need to configure a polygon layer that will serve as spatial reference:
 
-1. Cliccare sull'icona delle impostazioni (⚙️) nella barra degli strumenti del plugin
-2. Selezionare il layer poligonale desiderato dal menu a tendina
-3. Scegliere la cartella di destinazione per le esportazioni
-4. Cliccare "OK" per salvare la configurazione
+1. Click the settings icon (⚙️) in the plugin toolbar
+2. Select the desired polygon layer from the dropdown menu
+3. Choose the destination folder for exports
+4. Click "OK" to save the configuration
 
-### 2. Configurazione cartella di output
+### 2. Output Folder Configuration
 
-Nella stessa finestra di configurazione, è possibile impostare:
-- La cartella di destinazione predefinita per le esportazioni
-- Se non specificata, verrà utilizzata una sottocartella `exported_layers` nella directory del plugin
+In the same configuration window, you can set:
+- The default destination folder for exports
+- If not specified, a subfolder `exported_layers` in the plugin directory will be used
 
-## Utilizzo
+## Usage
 
-### Avvio esportazione
+### Starting Export
 
-1. Cliccare sull'icona di esportazione (📤) nella barra degli strumenti del plugin
-2. Selezionare i layer da esportare dall'elenco disponibile
-3. Scegliere la modalità di esportazione:
-   - **Elementi nei poligoni selezionati**: esporta solo gli elementi che ricadono entro i poligoni selezionati
-   - **Tutti gli elementi**: esporta tutti gli elementi dei layer selezionati (senza filtro spaziale)
+1. Click the export icon (📤) in the plugin toolbar
+2. Select the layers to export from the available list
+3. Choose the export mode:
+   - **Features within selected polygons**: exports only features that fall within the selected polygons
+   - **All features**: exports all features from the selected layers (without spatial filtering)
 
-### Selezione poligoni
+### Polygon Selection
 
-Per la modalità "Elementi nei poligoni selezionati":
-- Selezionare uno o più poligoni nel layer configurato prima di avviare l'esportazione
-- Il plugin utilizzerà questi poligoni come maschera spaziale per filtrare i dati
+For the "Features within selected polygons" mode:
+- Select one or more polygons in the configured layer before starting the export
+- The plugin will use these polygons as a spatial mask to filter the data
 
-### Nome directory di esportazione
+### Export Directory Name
 
-- È possibile specificare un nome personalizzato per la cartella che conterrà i file esportati
-- Se non specificato, verrà utilizzato un timestamp come nome della cartella
+- You can specify a custom name for the folder that will contain the exported files
+- If not specified, a timestamp will be used as the folder name
 
 ## Output
 
-Il plugin genera:
+The plugin generates:
 
-### File esportati
-- **Layer vettoriali**: esportati in formato GeoPackage (.gpkg)
-- **Layer raster**: conservati con le loro impostazioni originali
-- **Progetto QGIS**: file .qgz contenente tutti i layer esportati con la stessa struttura ad albero del progetto originale, incluse le relazioni tra tabelle
+### Exported Files
+- **Vector layers**: exported in GeoPackage format (.gpkg)
+- **Raster layers**: preserved with their original settings
+- **QGIS Project**: .qgz file containing all exported layers with the same tree structure as the original project, including table relationships
 
-### Struttura cartella di output
+### Output Folder Structure
 ```
-cartella_esportazione/
+export_folder/
 ├── layer1.gpkg
 ├── layer2.gpkg
 ├── raster1.tif
-├── [nome_progetto]_exported.qgz
-└── [altri file esportati]
+├── [project_name]_exported.qgz
+└── [other exported files]
 ```
 
-**Nota**: Il nome del file del progetto QGIS esportato corrisponde al nome del progetto corrente (ad esempio: `mio_progetto_exported.qgz`).
+**Note**: The name of the exported QGIS project file corresponds to the current project name (e.g.: `my_project_exported.qgz`).
 
-## Funzionalità avanzate
+## Advanced Features
 
-### Gestione esportazioni concorrenti
-- Il plugin impedisce l'avvio di esportazioni multiple simultanee
-- Se si tenta di avviare una nuova esportazione mentre un'altra è in corso, viene mostrato un avviso di conferma
-- È possibile scegliere di procedere comunque o annullare la nuova esportazione
+### Concurrent Export Management
+- The plugin prevents starting multiple simultaneous exports
+- If you try to start a new export while another is in progress, a confirmation warning is shown
+- You can choose to proceed anyway or cancel the new export
 
-### Conservazione delle proprietà dei layer
-- **Stili e renderer**: mantenuti nel progetto esportato
-- **Etichette (labels)**: impostazioni di etichettatura copiate solo se effettivamente abilitate e configurate (validazione semplificata per compatibilità versioni QGIS)
-- **Visibilità**: rispettata la configurazione di visibilità dei layer
-- **Scala di visibilità**: conservate le impostazioni di scala minima/massima
-- **Opacità**: mantenuta per i layer raster
+### Layer Properties Preservation
+- **Styles and renderers**: maintained in the exported project
+- **Labels**: labeling settings copied only if actually enabled and configured (simplified validation for QGIS version compatibility)
+- **Visibility**: layer visibility configuration is respected
+- **Scale visibility**: minimum/maximum scale settings are preserved
+- **Opacity**: maintained for raster layers
 
-### Gestione delle relazioni
-- **Relazioni tra tabelle**: vengono copiate automaticamente nel progetto esportato
-- **Solo relazioni complete**: vengono incluse solo le relazioni dove entrambi i layer correlati sono stati esportati
-- **Log delle operazioni**: vengono registrati nel log di QGIS i dettagli su quali relazioni sono state copiate o saltate
+### Relationship Management
+- **Table relationships**: automatically copied to the exported project
+- **Complete relationships only**: only relationships where both related layers have been exported are included
+- **Operation logs**: details about which relationships were copied or skipped are logged in QGIS logs
 
-### Barra di progresso
-- Monitoraggio in tempo reale dell'avanzamento dell'esportazione
-- Possibilità di cancellare l'operazione in corso
+### Progress Bar
+- Real-time monitoring of export progress
+- Ability to cancel the ongoing operation
 
-### Ottimizzazioni per database e performance
-- **Gestione timeout connessioni**: retry automatico per connessioni database scadute
-- **Query ottimizzate**: utilizzo di bounding box spaziali per ridurre il carico sui database
-- **Nessun limite**: esportazione di tutti gli elementi disponibili nei layer selezionati
-- **Controlli cancellazione**: possibilità di interrompere operazioni lunghe in qualsiasi momento
-- **Buffer spaziale**: piccolo buffer aggiunto alle bounding box per evitare perdita di features ai bordi
+### Database and Performance Optimizations
+- **Connection timeout management**: automatic retry for expired database connections
+- **Optimized queries**: use of spatial bounding boxes to reduce database load
+- **No limits**: export of all available features in the selected layers
+- **Cancellation controls**: ability to interrupt long operations at any time
+- **Spatial buffer**: small buffer added to bounding boxes to avoid losing features at edges
 
-## Requisiti di sistema
+## System Requirements
 
-- QGIS 3.22 o superiore
+- QGIS 3.22 or higher
 - Python 3.7+
-- Moduli QGIS standard (nessuna dipendenza esterna)
+- Standard QGIS modules (no external dependencies)
 
-## Note tecniche
+## Technical Notes
 
-- L'esportazione avviene in background tramite thread separato per non bloccare l'interfaccia utente
-- I layer vettoriali vengono ritagliati geometricamente utilizzando gli algoritmi di QGIS
-- Il progetto QGIS esportato mantiene la struttura ad albero dei layer del progetto originale
-- I layer raster vengono referenziati nel nuovo progetto mantenendo le impostazioni originali
+- Export occurs in background via separate thread to not block the user interface
+- Vector layers are geometrically clipped using QGIS algorithms
+- The exported QGIS project maintains the layer tree structure of the original project
+- Raster layers are referenced in the new project maintaining their original settings
 
-## Risoluzione problemi
+## Troubleshooting
 
-### Timeout e freeze durante esportazioni
-Se QGIS va in freeze durante esportazioni complesse con molti dati:
+### Timeouts and Freezes During Exports
+If QGIS freezes during complex exports with lots of data:
 
-1. **Usa selezione poligonale**: invece di "Tutti gli elementi", seleziona specifici poligoni per limitare i dati
-2. **Riduci numero layer**: esporta meno layer contemporaneamente
-3. **Cancella operazione**: usa il pulsante "Annulla" nella barra di progresso per interrompere esportazioni lunghe
-4. **Controlla connessione database**: assicurati che la connessione PostgreSQL/PostGIS sia stabile
+1. **Use polygon selection**: instead of "All features", select specific polygons to limit the data
+2. **Reduce layer count**: export fewer layers simultaneously
+3. **Cancel operation**: use the "Cancel" button in the progress bar to interrupt long exports
+4. **Check database connection**: ensure PostgreSQL/PostGIS connection is stable
 
-### Errori di connessione database
-- **"fe_sendauth: no password supplied"**: il plugin ritenta automaticamente la connessione, ma è necessario salvare le credenziali
-- **Timeout connessione**: il sistema attende qualche secondo e riprova automaticamente
-- Se i problemi persistono, verifica le impostazioni di connessione al database in QGIS
+### Database Connection Errors
+- **"fe_sendauth: no password supplied"**: the plugin automatically retries the connection, but credentials need to be saved
+- **Connection timeout**: the system waits a few seconds and automatically retries
+- If problems persist, check database connection settings in QGIS
 
-#### Come salvare le credenziali del database nel progetto QGIS:
-1. **Per ciascun layer PostGIS nel progetto**:
-   - Fai clic destro sul layer → Proprietà
-   - Vai alla scheda "Origine"
-   - Nella sezione "Connessione", clicca su "Memorizza nella configurazione del progetto"
-   - Inserisci username e password quando richiesti
-   - Clicca "OK" per salvare
+#### How to save database credentials in QGIS project:
+1. **For each PostGIS layer in the project**:
+   - Right-click on the layer → Properties
+   - Go to the "Source" tab
+   - In the "Connection" section, click "Store in project configuration"
+   - Enter username and password when prompted
+   - Click "OK" to save
 
-2. **Verifica che le credenziali siano salvate**:
-   - Riapri il progetto QGIS
-   - I layer dovrebbero caricarsi senza richiedere nuovamente la password
+2. **Verify that credentials are saved**:
+   - Reopen the QGIS project
+   - Layers should load without requiring password again
 
-3. **Se usi l'autenticazione master di QGIS**:
-   - Vai su Impostazioni → Opzioni → Autenticazione
-   - Assicurati che l'autenticazione sia configurata correttamente
-   - Verifica che i layer utilizzino l'autenticazione master
+3. **If using QGIS master authentication**:
+   - Go to Settings → Options → Authentication
+   - Ensure authentication is configured correctly
+   - Verify that layers use master authentication
 
-### Esportazioni di grandi dimensioni
-Per esportazioni molto grandi, considera:
-- Usa la modalità "Elementi nei poligoni selezionati" per limitare l'esportazione a specifiche aree
-- Effettua esportazioni separate per porzioni più piccole dell'area di interesse
-- Usa il pulsante "Annulla" se l'esportazione sta impiegando troppo tempo
+### Large Exports
+For very large exports, consider:
+- Use "Features within selected polygons" mode to limit export to specific areas
+- Perform separate exports for smaller portions of the area of interest
+- Use the "Cancel" button if the export is taking too long
 
-## Cronologia delle modifiche
+## Changelog
 
-Vedi [CHANGELOG.md](CHANGELOG.md) per la cronologia completa delle modifiche e delle nuove funzionalità.
+See [CHANGELOG.md](CHANGELOG.md) for the complete changelog and new features.
 
-## Supporto
+## Support
 
-Per segnalare bug o richiedere funzionalità, utilizzare il repository del progetto.
+To report bugs or request features, use the project repository.
 
-## Licenza
+## License
 
-Questo plugin può essere distribuito solo sotto licenza GNU GPL v.2 o successiva.
+This plugin can only be distributed under GNU GPL v.2 or later license.

@@ -2,8 +2,8 @@
 name=Export Layers Within Area
 qgisMinimumVersion=3.22
 qgisMaximumVersion=3.99
-description=Esporta i layer selezionati limitandosi agli elementi contenuti in uno o più poligoni di un layer a piacere
-about=Il plugin permette di configurare un layer poligonale di riferimento e di esportare altri layer vettoriali limitandone i contenuti ai poligoni selezionati.
+description=Exports selected layers limiting to features contained within one or more polygons from any layer
+about=The plugin allows configuring a reference polygon layer and exporting other vector layers by limiting their content to the selected polygons.
 version=2.0.0
 author=Marco Faenzi
 email=marco.faenzi@gmail.com
